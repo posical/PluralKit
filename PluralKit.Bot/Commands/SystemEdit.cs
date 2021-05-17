@@ -1,19 +1,16 @@
 using System;
 using System.Linq;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
-using Dapper;
-
-using DSharpPlus;
-using DSharpPlus.Entities;
+using Myriad.Builders;
+using Myriad.Types;
 
 using NodaTime;
 using NodaTime.Text;
 using NodaTime.TimeZones;
 
 using PluralKit.Core;
-
-using Sentry.Protocol;
 
 namespace PluralKit.Bot
 {
@@ -80,10 +77,10 @@ namespace PluralKit.Bot
                 else if (ctx.MatchFlag("r", "raw"))
                     await ctx.Reply($"```\n{ctx.System.Description}\n```");
                 else
-                    await ctx.Reply(embed: new DiscordEmbedBuilder()
-                        .WithTitle("System description")
-                        .WithDescription(ctx.System.Description)
-                        .WithFooter("To print the description with formatting, type `pk;s description -raw`. To clear it, type `pk;s description -clear`. To change it, type `pk;s description <new description>`.")
+                    await ctx.Reply(embed: new EmbedBuilder()
+                        .Title("System description")
+                        .Description(ctx.System.Description)
+                        .Footer(new("To print the description with formatting, type `pk;s description -raw`. To clear it, type `pk;s description -clear`. To change it, type `pk;s description <new description>`."))
                         .Build());
             }
             else
@@ -94,6 +91,47 @@ namespace PluralKit.Bot
                 await _db.Execute(conn => _repo.UpdateSystem(conn, ctx.System.Id, patch));
                 
                 await ctx.Reply($"{Emojis.Success} System description changed.");
+            }
+        }
+
+        public async Task Color(Context ctx) {
+            ctx.CheckSystem();
+
+            if (await ctx.MatchClear())
+            {
+                var patch = new SystemPatch {Color = Partial<string>.Null()};
+                await _db.Execute(conn => _repo.UpdateSystem(conn, ctx.System.Id, patch));
+
+                await ctx.Reply($"{Emojis.Success} System color cleared.");
+            }
+            else if (!ctx.HasNext()) 
+            {
+                if (ctx.System.Color == null) 
+                    await ctx.Reply(
+                            $"Your system does not have a color set. To set one, type `pk;system color <color>`.");
+                else
+                    await ctx.Reply(embed: new EmbedBuilder()
+                        .Title("System color")
+                        .Color(ctx.System.Color.ToDiscordColor())
+                        .Thumbnail(new($"https://fakeimg.pl/256x256/{ctx.System.Color}/?text=%20"))
+                        .Description($"Your system's color is **#{ctx.System.Color}**. To clear it, type `pk;s color -clear`.")
+                        .Build());
+            }
+            else
+            {
+                var color = ctx.RemainderOrNull();
+
+                if (color.StartsWith("#")) color = color.Substring(1);
+                if (!Regex.IsMatch(color, "^[0-9a-fA-F]{6}$")) throw Errors.InvalidColorError(color);
+
+                var patch = new SystemPatch {Color = Partial<string>.Present(color.ToLowerInvariant())};
+                await _db.Execute(conn => _repo.UpdateSystem(conn, ctx.System.Id, patch));
+
+                await ctx.Reply(embed: new EmbedBuilder()
+                    .Title($"{Emojis.Success} System color changed.")
+                    .Color(color.ToDiscordColor())
+                    .Thumbnail(new($"https://fakeimg.pl/256x256/{color}/?text=%20"))
+                    .Build());
             }
         }
         
@@ -155,7 +193,7 @@ namespace PluralKit.Bot
                 // The attachment's already right there, no need to preview it.
                 var hasEmbed = img.Source != AvatarSource.Attachment;
                 await (hasEmbed 
-                    ? ctx.Reply(msg, embed: new DiscordEmbedBuilder().WithImageUrl(img.Url).Build()) 
+                    ? ctx.Reply(msg, embed: new EmbedBuilder().Image(new(img.Url)).Build()) 
                     : ctx.Reply(msg));
             }
 
@@ -163,10 +201,10 @@ namespace PluralKit.Bot
             {
                 if ((ctx.System.AvatarUrl?.Trim() ?? "").Length > 0)
                 {
-                    var eb = new DiscordEmbedBuilder()
-                        .WithTitle("System icon")
-                        .WithImageUrl(ctx.System.AvatarUrl)
-                        .WithDescription("To clear, use `pk;system icon clear`.");
+                    var eb = new EmbedBuilder()
+                        .Title("System icon")
+                        .Image(new(ctx.System.AvatarUrl))
+                        .Description("To clear, use `pk;system icon clear`.");
                     await ctx.Reply(embed: eb.Build());
                 }
                 else
@@ -195,8 +233,18 @@ namespace PluralKit.Bot
         
         public async Task SystemProxy(Context ctx)
         {
-            ctx.CheckSystem().CheckGuildContext();
-            var gs = await _db.Execute(c => _repo.GetSystemGuild(c, ctx.Guild.Id, ctx.System.Id));
+            ctx.CheckSystem();
+
+            var guild = ctx.MatchGuild() ?? ctx.Guild ??
+                throw new PKError("You must run this command in a server or pass a server ID.");
+
+            var gs = await _db.Execute(c => _repo.GetSystemGuild(c, guild.Id, ctx.System.Id));
+
+            string serverText;
+            if (guild.Id == ctx.Guild?.Id)
+                serverText = $"this server ({guild.Name.EscapeMarkdown()})";
+            else
+                serverText = $"the server {guild.Name.EscapeMarkdown()}";
 
             bool newValue;
             if (ctx.Match("on", "enabled", "true", "yes")) newValue = true;
@@ -205,19 +253,19 @@ namespace PluralKit.Bot
             else
             {
                 if (gs.ProxyEnabled)
-                    await ctx.Reply("Proxying in this server is currently **enabled** for your system. To disable it, type `pk;system proxy off`.");
+                    await ctx.Reply($"Proxying in {serverText} is currently **enabled** for your system. To disable it, type `pk;system proxy off`.");
                 else
-                    await ctx.Reply("Proxying in this server is currently **disabled** for your system. To enable it, type `pk;system proxy on`.");
+                    await ctx.Reply($"Proxying in {serverText} is currently **disabled** for your system. To enable it, type `pk;system proxy on`.");
                 return;
             }
 
             var patch = new SystemGuildPatch {ProxyEnabled = newValue};
-            await _db.Execute(conn => _repo.UpsertSystemGuild(conn, ctx.System.Id, ctx.Guild.Id, patch));
+            await _db.Execute(conn => _repo.UpsertSystemGuild(conn, ctx.System.Id, guild.Id, patch));
 
             if (newValue)
-                await ctx.Reply($"Message proxying in this server ({ctx.Guild.Name.EscapeMarkdown()}) is now **enabled** for your system.");
+                await ctx.Reply($"Message proxying in {serverText} is now **enabled** for your system.");
             else
-                await ctx.Reply($"Message proxying in this server ({ctx.Guild.Name.EscapeMarkdown()}) is now **disabled** for your system.");
+                await ctx.Reply($"Message proxying in {serverText} is now **disabled** for your system.");
         }
         
          public async Task SystemTimezone(Context ctx)
@@ -260,14 +308,14 @@ namespace PluralKit.Bot
 
             Task PrintEmbed()
             {
-                var eb = new DiscordEmbedBuilder()
-                    .WithTitle("Current privacy settings for your system")
-                    .AddField("Description", ctx.System.DescriptionPrivacy.Explanation())
-                    .AddField("Member list", ctx.System.MemberListPrivacy.Explanation())
-                    .AddField("Group list", ctx.System.GroupListPrivacy.Explanation())
-                    .AddField("Current fronter(s)", ctx.System.FrontPrivacy.Explanation())
-                    .AddField("Front/switch history", ctx.System.FrontHistoryPrivacy.Explanation())
-                    .WithDescription("To edit privacy settings, use the command:\n`pk;system privacy <subject> <level>`\n\n- `subject` is one of `description`, `list`, `front`, `fronthistory`, `groups`, or `all` \n- `level` is either `public` or `private`.");
+                var eb = new EmbedBuilder()
+                    .Title("Current privacy settings for your system")
+                    .Field(new("Description", ctx.System.DescriptionPrivacy.Explanation()))
+                    .Field(new("Member list", ctx.System.MemberListPrivacy.Explanation()))
+                    .Field(new("Group list", ctx.System.GroupListPrivacy.Explanation()))
+                    .Field(new("Current fronter(s)", ctx.System.FrontPrivacy.Explanation()))
+                    .Field(new("Front/switch history", ctx.System.FrontHistoryPrivacy.Explanation()))
+                    .Description("To edit privacy settings, use the command:\n`pk;system privacy <subject> <level>`\n\n- `subject` is one of `description`, `list`, `front`, `fronthistory`, `groups`, or `all` \n- `level` is either `public` or `private`.");
                 return ctx.Reply(embed: eb.Build());
             }
 

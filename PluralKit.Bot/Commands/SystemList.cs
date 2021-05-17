@@ -1,8 +1,6 @@
 using System.Text;
 using System.Threading.Tasks;
 
-using NodaTime;
-
 using PluralKit.Core;
 
 namespace PluralKit.Bot
@@ -22,7 +20,7 @@ namespace PluralKit.Bot
             ctx.CheckSystemPrivacy(target, target.MemberListPrivacy);
 
             var opts = ctx.ParseMemberListOptions(ctx.LookupContextFor(target));
-            await ctx.RenderMemberList(ctx.LookupContextFor(target), _db, target.Id, GetEmbedTitle(target, opts), opts);
+            await ctx.RenderMemberList(ctx.LookupContextFor(target), _db, target.Id, GetEmbedTitle(target, opts), target.Color, opts);
         }
 
         private string GetEmbedTitle(PKSystem target, MemberListOptions opts)

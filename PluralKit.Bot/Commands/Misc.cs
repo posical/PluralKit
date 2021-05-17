@@ -6,14 +6,19 @@ using System.Threading.Tasks;
 
 using App.Metrics;
 
-using DSharpPlus;
-
 using Humanizer;
 
 using NodaTime;
 
 using PluralKit.Core;
-using DSharpPlus.Entities;
+
+using Myriad.Builders;
+using Myriad.Cache;
+using Myriad.Extensions;
+using Myriad.Gateway;
+using Myriad.Rest;
+using Myriad.Rest.Types.Requests;
+using Myriad.Types;
 
 namespace PluralKit.Bot {
     public class Misc
@@ -25,8 +30,12 @@ namespace PluralKit.Bot {
         private readonly EmbedService _embeds;
         private readonly IDatabase _db;
         private readonly ModelRepository _repo;
+        private readonly IDiscordCache _cache;
+        private readonly DiscordApiClient _rest;
+        private readonly Cluster _cluster;
+        private readonly Bot _bot;
 
-        public Misc(BotConfig botConfig, IMetrics metrics, CpuStatService cpu, ShardInfoService shards, EmbedService embeds, ModelRepository repo, IDatabase db)
+        public Misc(BotConfig botConfig, IMetrics metrics, CpuStatService cpu, ShardInfoService shards, EmbedService embeds, ModelRepository repo, IDatabase db, IDiscordCache cache, DiscordApiClient rest, Bot bot, Cluster cluster)
         {
             _botConfig = botConfig;
             _metrics = metrics;
@@ -35,20 +44,26 @@ namespace PluralKit.Bot {
             _embeds = embeds;
             _repo = repo;
             _db = db;
+            _cache = cache;
+            _rest = rest;
+            _bot = bot;
+            _cluster = cluster;
         }
         
         public async Task Invite(Context ctx)
         {
-            var clientId = _botConfig.ClientId ?? ctx.Client.CurrentApplication.Id;
-            var permissions = new Permissions()
-                .Grant(Permissions.AddReactions)
-                .Grant(Permissions.AttachFiles)
-                .Grant(Permissions.EmbedLinks)
-                .Grant(Permissions.ManageMessages)
-                .Grant(Permissions.ManageWebhooks)
-                .Grant(Permissions.ReadMessageHistory)
-                .Grant(Permissions.SendMessages);
-            var invite = $"https://discord.com/oauth2/authorize?client_id={clientId}&scope=bot%20applications.commands&permissions={(long)permissions}";
+            var clientId = _botConfig.ClientId ?? _cluster.Application?.Id;
+
+            var permissions = 
+                PermissionSet.AddReactions |
+                PermissionSet.AttachFiles | 
+                PermissionSet.EmbedLinks |
+                PermissionSet.ManageMessages |
+                PermissionSet.ManageWebhooks |
+                PermissionSet.ReadMessageHistory | 
+                PermissionSet.SendMessages;
+            
+            var invite = $"https://discord.com/oauth2/authorize?client_id={clientId}&scope=bot%20applications.commands&permissions={(ulong)permissions}";
             await ctx.Reply($"{Emojis.Success} Use this link to add PluralKit to your server:\n<{invite}>");
         }
         
@@ -69,8 +84,8 @@ namespace PluralKit.Bot {
             var totalSwitches = _metrics.Snapshot.GetForContext("Application").Gauges.FirstOrDefault(m => m.MultidimensionalName == CoreMetrics.SwitchCount.Name)?.Value ?? 0;
             var totalMessages = _metrics.Snapshot.GetForContext("Application").Gauges.FirstOrDefault(m => m.MultidimensionalName == CoreMetrics.MessageCount.Name)?.Value ?? 0;
 
-            var shardId = ctx.Shard.ShardId;
-            var shardTotal = ctx.Client.ShardClients.Count;
+            var shardId = ctx.Shard.ShardInfo.ShardId;
+            var shardTotal = ctx.Cluster.Shards.Count;
             var shardUpTotal = _shards.Shards.Where(x => x.Connected).Count();
             var shardInfo = _shards.GetShardInfo(ctx.Shard);
             
@@ -79,30 +94,31 @@ namespace PluralKit.Bot {
 
             var shardUptime = SystemClock.Instance.GetCurrentInstant() - shardInfo.LastConnectionTime;
 
-            var embed = new DiscordEmbedBuilder();
-            if (messagesReceived != null) embed.AddField("Messages processed",$"{messagesReceived.OneMinuteRate * 60:F1}/m ({messagesReceived.FifteenMinuteRate * 60:F1}/m over 15m)", true);
-            if (messagesProxied != null) embed.AddField("Messages proxied", $"{messagesProxied.OneMinuteRate * 60:F1}/m ({messagesProxied.FifteenMinuteRate * 60:F1}/m over 15m)", true);
-            if (commandsRun != null) embed.AddField("Commands executed", $"{commandsRun.OneMinuteRate * 60:F1}/m ({commandsRun.FifteenMinuteRate * 60:F1}/m over 15m)", true);
+            var embed = new EmbedBuilder();
+            if (messagesReceived != null) embed.Field(new("Messages processed",$"{messagesReceived.OneMinuteRate * 60:F1}/m ({messagesReceived.FifteenMinuteRate * 60:F1}/m over 15m)", true));
+            if (messagesProxied != null) embed.Field(new("Messages proxied", $"{messagesProxied.OneMinuteRate * 60:F1}/m ({messagesProxied.FifteenMinuteRate * 60:F1}/m over 15m)", true));
+            if (commandsRun != null) embed.Field(new("Commands executed", $"{commandsRun.OneMinuteRate * 60:F1}/m ({commandsRun.FifteenMinuteRate * 60:F1}/m over 15m)", true));
 
             embed
-                .AddField("Current shard", $"Shard #{shardId} (of {shardTotal} total, {shardUpTotal} are up)", true)
-                .AddField("Shard uptime", $"{shardUptime.FormatDuration()} ({shardInfo.DisconnectionCount} disconnections)", true)
-                .AddField("CPU usage", $"{_cpu.LastCpuMeasure:P1}", true)
-                .AddField("Memory usage", $"{memoryUsage / 1024 / 1024} MiB", true)
-                .AddField("Latency", $"API: {apiLatency.TotalMilliseconds:F0} ms, shard: {shardInfo.ShardLatency.Milliseconds} ms", true)
-                .AddField("Total numbers", $"{totalSystems:N0} systems, {totalMembers:N0} members, {totalGroups:N0} groups, {totalSwitches:N0} switches, {totalMessages:N0} messages");
-            await msg.ModifyAsync("", embed.Build());
+                .Field(new("Current shard", $"Shard #{shardId} (of {shardTotal} total, {shardUpTotal} are up)", true))
+                .Field(new("Shard uptime", $"{shardUptime.FormatDuration()} ({shardInfo.DisconnectionCount} disconnections)", true))
+                .Field(new("CPU usage", $"{_cpu.LastCpuMeasure:P1}", true))
+                .Field(new("Memory usage", $"{memoryUsage / 1024 / 1024} MiB", true))
+                .Field(new("Latency", $"API: {apiLatency.TotalMilliseconds:F0} ms, shard: {shardInfo.ShardLatency.Milliseconds} ms", true))
+                .Field(new("Total numbers", $"{totalSystems:N0} systems, {totalMembers:N0} members, {totalGroups:N0} groups, {totalSwitches:N0} switches, {totalMessages:N0} messages"));
+            await ctx.Rest.EditMessage(msg.ChannelId, msg.Id,
+                new MessageEditRequest {Content = "", Embed = embed.Build()});
         }
 
         public async Task PermCheckGuild(Context ctx)
         {
-            DiscordGuild guild;
-            DiscordMember senderGuildUser = null;
+            Guild guild;
+            GuildMemberPartial senderGuildUser = null;
 
             if (ctx.Guild != null && !ctx.HasNext())
             {
                 guild = ctx.Guild;
-                senderGuildUser = (DiscordMember)ctx.Author;
+                senderGuildUser = ctx.Member;
             }
             else
             {
@@ -110,31 +126,38 @@ namespace PluralKit.Bot {
                 if (!ulong.TryParse(guildIdStr, out var guildId))
                     throw new PKSyntaxError($"Could not parse {guildIdStr.AsCode()} as an ID.");
 
-                guild = ctx.Client.GetGuild(guildId);
-                if (guild != null) senderGuildUser = await guild.GetMember(ctx.Author.Id);
-                if (guild == null || senderGuildUser == null) throw Errors.GuildNotFound(guildId);
+                try {
+                    guild = await _rest.GetGuild(guildId);
+                } catch (Myriad.Rest.Exceptions.ForbiddenException) {
+                    throw Errors.GuildNotFound(guildId);
+                }
+                
+                if (guild != null) 
+                    senderGuildUser = await _rest.GetGuildMember(guildId, ctx.Author.Id);
+                if (guild == null || senderGuildUser == null) 
+                    throw Errors.GuildNotFound(guildId);
             }
 
             var requiredPermissions = new []
             {
-                Permissions.AccessChannels,
-                Permissions.SendMessages,
-                Permissions.AddReactions,
-                Permissions.AttachFiles,
-                Permissions.EmbedLinks,
-                Permissions.ManageMessages,
-                Permissions.ManageWebhooks
+                PermissionSet.ViewChannel,
+                PermissionSet.SendMessages,
+                PermissionSet.AddReactions,
+                PermissionSet.AttachFiles,
+                PermissionSet.EmbedLinks,
+                PermissionSet.ManageMessages,
+                PermissionSet.ManageWebhooks
             };
 
             // Loop through every channel and group them by sets of permissions missing
-            var permissionsMissing = new Dictionary<ulong, List<DiscordChannel>>();
+            var permissionsMissing = new Dictionary<ulong, List<Channel>>();
             var hiddenChannels = 0;
-            foreach (var channel in await guild.GetChannelsAsync())
+            foreach (var channel in await _rest.GetGuildChannels(guild.Id))
             {
-                var botPermissions = channel.BotPermissions();
+                var botPermissions = _bot.PermissionsIn(channel.Id);
+                var userPermissions = PermissionExtensions.PermissionsFor(guild, channel, ctx.Author.Id, senderGuildUser.Roles);
                 
-                var userPermissions = senderGuildUser.PermissionsIn(channel);
-                if ((userPermissions & Permissions.AccessChannels) == 0)
+                if ((userPermissions & PermissionSet.ViewChannel) == 0)
                 {
                     // If the user can't see this channel, don't calculate permissions for it
                     // (to prevent info-leaking, mostly)
@@ -154,18 +177,18 @@ namespace PluralKit.Bot {
                 // This means we can check if the dict is empty to see if all channels are proxyable
                 if (missingPermissionField != 0)
                 {
-                    permissionsMissing.TryAdd(missingPermissionField, new List<DiscordChannel>());
+                    permissionsMissing.TryAdd(missingPermissionField, new List<Channel>());
                     permissionsMissing[missingPermissionField].Add(channel);
                 }
             }
             
             // Generate the output embed
-            var eb = new DiscordEmbedBuilder()
-                .WithTitle($"Permission check for **{guild.Name}**");
+            var eb = new EmbedBuilder()
+                .Title($"Permission check for **{guild.Name}**");
 
             if (permissionsMissing.Count == 0)
             {
-                eb.WithDescription($"No errors found, all channels proxyable :)").WithColor(DiscordUtils.Green);
+                eb.Description($"No errors found, all channels proxyable :)").Color(DiscordUtils.Green);
             }
             else
             {
@@ -173,18 +196,18 @@ namespace PluralKit.Bot {
                 {
                     // Each missing permission field can have multiple missing channels
                     // so we extract them all and generate a comma-separated list
-                    var missingPermissionNames = ((Permissions)missingPermissionField).ToPermissionString();
+                    var missingPermissionNames = ((PermissionSet) missingPermissionField).ToPermissionString();
                     
                     var channelsList = string.Join("\n", channels
                         .OrderBy(c => c.Position)
                         .Select(c => $"#{c.Name}"));
-                    eb.AddField($"Missing *{missingPermissionNames}*", channelsList.Truncate(1000));
-                    eb.WithColor(DiscordUtils.Red);
+                    eb.Field(new($"Missing *{missingPermissionNames}*", channelsList.Truncate(1000)));
+                    eb.Color(DiscordUtils.Red);
                 }
             }
 
             if (hiddenChannels > 0)
-                eb.WithFooter($"{"channel".ToQuantity(hiddenChannels)} were ignored as you do not have view access to them.");
+                eb.Footer(new($"{"channel".ToQuantity(hiddenChannels)} were ignored as you do not have view access to them."));
 
             // Send! :)
             await ctx.Reply(embed: eb.Build());
@@ -192,19 +215,37 @@ namespace PluralKit.Bot {
         
         public async Task GetMessage(Context ctx)
         {
-            var word = ctx.PopArgument() ?? throw new PKSyntaxError("You must pass a message ID or link.");
+            var messageId = ctx.MatchMessage(true);
+            if (messageId == null)
+            {
+                if (!ctx.HasNext())
+                    throw new PKSyntaxError("You must pass a message ID or link.");
+                throw new PKSyntaxError($"Could not parse {ctx.PeekArgument().AsCode()} as a message ID or link.");
+            }
+            
+            var message = await _db.Execute(c => _repo.GetMessage(c, messageId.Value));
+            if (message == null) throw Errors.MessageNotFound(messageId.Value);
 
-            ulong messageId;
-            if (ulong.TryParse(word, out var id))
-                messageId = id;
-            else if (Regex.Match(word, "https://discord(?:app)?.com/channels/\\d+/\\d+/(\\d+)") is Match match && match.Success)
-                messageId = ulong.Parse(match.Groups[1].Value);
-            else throw new PKSyntaxError($"Could not parse {word.AsCode()} as a message ID or link.");
+            if (ctx.Match("delete") || ctx.MatchFlag("delete"))
+            {
+                if (message.System.Id != ctx.System.Id)
+                    throw new PKError("You can only delete your own messages.");
+                await ctx.Rest.DeleteMessage(message.Message.Channel, message.Message.Mid);
+                await ctx.Rest.DeleteMessage(ctx.Message);
+                return;
+            }
+            if (ctx.Match("author") || ctx.MatchFlag("author"))
+            {
+                var user = await _cache.GetOrFetchUser(_rest, message.Message.Sender);
+                var eb = new EmbedBuilder()
+                    .Author(new(user != null ? $"{user.Username}#{user.Discriminator}" : $"Deleted user ${message.Message.Sender}", IconUrl: user != null ? user.AvatarUrl() : null))
+                    .Description(message.Message.Sender.ToString());
 
-            var message = await _db.Execute(c => _repo.GetMessage(c, messageId));
-            if (message == null) throw Errors.MessageNotFound(messageId);
+                await ctx.Reply(user != null ? $"{user.Mention()} ({user.Id})" : $"*(deleted user {message.Message.Sender})*", embed: eb.Build());
+                return;
+            }
 
-            await ctx.Reply(embed: await _embeds.CreateMessageInfoEmbed(ctx.Shard, message));
+            await ctx.Reply(embed: await _embeds.CreateMessageInfoEmbed(message));
         }
     }
 }

@@ -2,13 +2,16 @@ using System;
 using System.Collections.Generic;
 using System.Linq;
 using System.Text;
+using System.Text.RegularExpressions;
 using System.Threading.Tasks;
 
 using Dapper;
 
-using DSharpPlus.Entities;
-
 using Humanizer;
+
+using NodaTime;
+
+using Myriad.Builders;
 
 using PluralKit.Core;
 
@@ -54,12 +57,12 @@ namespace PluralKit.Bot
             
             var newGroup = await _repo.CreateGroup(conn, ctx.System.Id, groupName);
             
-            var eb = new DiscordEmbedBuilder()
-                .WithDescription($"Your new group, **{groupName}**, has been created, with the group ID **`{newGroup.Hid}`**.\nBelow are a couple of useful commands:")
-                .AddField("View the group card", $"> pk;group **{newGroup.Reference()}**")
-                .AddField("Add members to the group", $"> pk;group **{newGroup.Reference()}** add **MemberName**\n> pk;group **{newGroup.Reference()}** add **Member1** **Member2** **Member3** (and so on...)")
-                .AddField("Set the description", $"> pk;group **{newGroup.Reference()}** description **This is my new group, and here is the description!**")
-                .AddField("Set the group icon", $"> pk;group **{newGroup.Reference()}** icon\n*(with an image attached)*");
+            var eb = new EmbedBuilder()
+                .Description($"Your new group, **{groupName}**, has been created, with the group ID **`{newGroup.Hid}`**.\nBelow are a couple of useful commands:")
+                .Field(new("View the group card", $"> pk;group **{newGroup.Reference()}**"))
+                .Field(new("Add members to the group", $"> pk;group **{newGroup.Reference()}** add **MemberName**\n> pk;group **{newGroup.Reference()}** add **Member1** **Member2** **Member3** (and so on...)"))
+                .Field(new("Set the description", $"> pk;group **{newGroup.Reference()}** description **This is my new group, and here is the description!**"))
+                .Field(new("Set the group icon", $"> pk;group **{newGroup.Reference()}** icon\n*(with an image attached)*"));
             await ctx.Reply($"{Emojis.Success} Group created!", eb.Build());
         }
 
@@ -100,15 +103,30 @@ namespace PluralKit.Bot
             }
             else if (!ctx.HasNext())
             {
-                // No perms check, display name isn't covered by member privacy 
-                var eb = new DiscordEmbedBuilder()
-                    .AddField("Name", target.Name)
-                    .AddField("Display Name", target.DisplayName ?? "*(none)*");
-                
-                if (ctx.System?.Id == target.System)
-                    eb.WithDescription($"To change display name, type `pk;group {target.Reference()} displayname <display name>`.\nTo clear it, type `pk;group {target.Reference()} displayname -clear`.");
-                
-                await ctx.Reply(embed: eb.Build());
+                // No perms check, display name isn't covered by member privacy
+                if (ctx.MatchFlag("r", "raw"))
+                {
+                    if (target.DisplayName == null)
+                    {
+                        if (ctx.System?.Id == target.System)
+                            await ctx.Reply($"This group does not have a display name set. To set one, type `pk;group {target.Reference()} displayname <display name>`.");
+                        else
+                            await ctx.Reply("This group does not have a display name set.");
+                    }
+                    else
+                        await ctx.Reply($"```\n{target.DisplayName}\n```");
+                }
+                else
+                {
+                    var eb = new EmbedBuilder()
+                        .Field(new("Name", target.Name))
+                        .Field(new("Display Name", target.DisplayName ?? "*(none)*"));
+                    
+                    if (ctx.System?.Id == target.System)
+                        eb.Description($"To change display name, type `pk;group {target.Reference()} displayname <display name>`.\nTo clear it, type `pk;group {target.Reference()} displayname -clear`.\nTo print the raw display name, type `pk;group {target.Reference()} displayname -raw`.");
+                    
+                    await ctx.Reply(embed: eb.Build());
+                }
             }
             else
             {
@@ -143,11 +161,11 @@ namespace PluralKit.Bot
                 else if (ctx.MatchFlag("r", "raw"))
                     await ctx.Reply($"```\n{target.Description}\n```");
                 else
-                    await ctx.Reply(embed: new DiscordEmbedBuilder()
-                        .WithTitle("Group description")
-                        .WithDescription(target.Description)
-                        .AddField("\u200B", $"To print the description with formatting, type `pk;group {target.Reference()} description -raw`." 
-                                    + (ctx.System?.Id == target.System ? $" To clear it, type `pk;group {target.Reference()} description -clear`." : ""))
+                    await ctx.Reply(embed: new EmbedBuilder()
+                        .Title("Group description")
+                        .Description(target.Description)
+                        .Field(new("\u200B", $"To print the description with formatting, type `pk;group {target.Reference()} description -raw`." 
+                                    + (ctx.System?.Id == target.System ? $" To clear it, type `pk;group {target.Reference()} description -clear`." : "")))
                         .Build());
             }
             else
@@ -194,7 +212,7 @@ namespace PluralKit.Bot
                 // The attachment's already right there, no need to preview it.
                 var hasEmbed = img.Source != AvatarSource.Attachment;
                 await (hasEmbed 
-                    ? ctx.Reply(msg, embed: new DiscordEmbedBuilder().WithImageUrl(img.Url).Build()) 
+                    ? ctx.Reply(msg, embed: new EmbedBuilder().Image(new(img.Url)).Build()) 
                     : ctx.Reply(msg));
             }
 
@@ -202,13 +220,13 @@ namespace PluralKit.Bot
             {
                 if ((target.Icon?.Trim() ?? "").Length > 0)
                 {
-                    var eb = new DiscordEmbedBuilder()
-                        .WithTitle("Group icon")
-                        .WithImageUrl(target.Icon);
+                    var eb = new EmbedBuilder()
+                        .Title("Group icon")
+                        .Image(new(target.Icon));
                     
                     if (target.System == ctx.System?.Id)
                     {
-                        eb.WithDescription($"To clear, use `pk;group {target.Reference()} icon -clear`.");
+                        eb.Description($"To clear, use `pk;group {target.Reference()} icon -clear`.");
                     }
 
                     await ctx.Reply(embed: eb.Build());
@@ -223,6 +241,53 @@ namespace PluralKit.Bot
                 await SetIcon(img);
             else
                 await ShowIcon();
+        }
+        public async Task GroupColor(Context ctx, PKGroup target)
+        {
+            var color = ctx.RemainderOrNull();
+            if (await ctx.MatchClear())
+            {
+                ctx.CheckOwnGroup(target);
+                
+                var patch = new GroupPatch {Color = Partial<string>.Null()};
+                await _db.Execute(conn => _repo.UpdateGroup(conn, target.Id, patch));
+                
+                await ctx.Reply($"{Emojis.Success} Group color cleared.");
+            }
+            else if (!ctx.HasNext())
+            {
+
+                if (target.Color == null)
+                    if (ctx.System?.Id == target.System)
+                        await ctx.Reply(
+                            $"This group does not have a color set. To set one, type `pk;group {target.Reference()} color <color>`.");
+                    else
+                        await ctx.Reply("This group does not have a color set.");
+                else
+                    await ctx.Reply(embed: new EmbedBuilder()
+                        .Title("Group color")
+                        .Color(target.Color.ToDiscordColor())
+                        .Thumbnail(new($"https://fakeimg.pl/256x256/{target.Color}/?text=%20"))
+                        .Description($"This group's color is **#{target.Color}**."
+                                         + (ctx.System?.Id == target.System ? $" To clear it, type `pk;group {target.Reference()} color -clear`." : ""))
+                        .Build());
+            }
+            else
+            {
+                ctx.CheckOwnGroup(target);
+
+                if (color.StartsWith("#")) color = color.Substring(1);
+                if (!Regex.IsMatch(color, "^[0-9a-fA-F]{6}$")) throw Errors.InvalidColorError(color);
+                
+                var patch = new GroupPatch {Color = Partial<string>.Present(color.ToLowerInvariant())};
+                await _db.Execute(conn => _repo.UpdateGroup(conn, target.Id, patch));
+
+                await ctx.Reply(embed: new EmbedBuilder()
+                    .Title($"{Emojis.Success} Group color changed.")
+                    .Color(color.ToDiscordColor())
+                    .Thumbnail(new($"https://fakeimg.pl/256x256/{color}/?text=%20"))
+                    .Build());
+            }
         }
 
         public async Task ListSystemGroups(Context ctx, PKSystem system)
@@ -263,9 +328,9 @@ namespace PluralKit.Bot
             }
 
             var title = system.Name != null ? $"Groups of {system.Name} (`{system.Hid}`)" : $"Groups of `{system.Hid}`";
-            await ctx.Paginate(groups.ToAsyncEnumerable(), groups.Count, 25, title, Renderer);
+            await ctx.Paginate(groups.ToAsyncEnumerable(), groups.Count, 25, title, ctx.System.Color, Renderer);
             
-            Task Renderer(DiscordEmbedBuilder eb, IEnumerable<ListedGroup> page)
+            Task Renderer(EmbedBuilder eb, IEnumerable<ListedGroup> page)
             {
                 eb.WithSimpleLineContent(page.Select(g =>
                 {
@@ -274,7 +339,7 @@ namespace PluralKit.Bot
                     else
                         return $"[`{g.Hid}`] **{g.Name.EscapeMarkdown()}** ({"member".ToQuantity(g.MemberCount)})";
                 }));
-                eb.WithFooter($"{groups.Count} total.");
+                eb.Footer(new($"{groups.Count} total."));
                 return Task.CompletedTask;
             }
         }
@@ -342,7 +407,7 @@ namespace PluralKit.Bot
             if (opts.Search != null) 
                 title.Append($" matching **{opts.Search}**");
             
-            await ctx.RenderMemberList(ctx.LookupContextFor(target.System), _db, target.System, title.ToString(), opts);
+            await ctx.RenderMemberList(ctx.LookupContextFor(target.System), _db, target.System, title.ToString(), target.Color, opts);
         }
 
         public enum AddRemoveOperation
@@ -357,13 +422,13 @@ namespace PluralKit.Bot
             // Display privacy settings
             if (!ctx.HasNext() && newValueFromCommand == null)
             {
-                await ctx.Reply(embed: new DiscordEmbedBuilder()
-                    .WithTitle($"Current privacy settings for {target.Name}")
-                    .AddField("Description", target.DescriptionPrivacy.Explanation())
-                    .AddField("Icon", target.IconPrivacy.Explanation())
-                    .AddField("Member list", target.ListPrivacy.Explanation())
-                    .AddField("Visibility", target.Visibility.Explanation())
-                    .WithDescription($"To edit privacy settings, use the command:\n> pk;group **{target.Reference()}** privacy **<subject>** **<level>**\n\n- `subject` is one of `description`, `icon`, `members`, `visibility`, or `all`\n- `level` is either `public` or `private`.")
+                await ctx.Reply(embed: new EmbedBuilder()
+                    .Title($"Current privacy settings for {target.Name}")
+                    .Field(new("Description", target.DescriptionPrivacy.Explanation()) )
+                    .Field(new("Icon", target.IconPrivacy.Explanation()))
+                    .Field(new("Member list", target.ListPrivacy.Explanation()))
+                    .Field(new("Visibility", target.Visibility.Explanation()))
+                    .Description($"To edit privacy settings, use the command:\n> pk;group **{target.Reference()}** privacy **<subject>** **<level>**\n\n- `subject` is one of `description`, `icon`, `members`, `visibility`, or `all`\n- `level` is either `public` or `private`.")
                     .Build()); 
                 return;
             }
@@ -426,6 +491,32 @@ namespace PluralKit.Bot
             await _db.Execute(conn => _repo.DeleteGroup(conn, target.Id));
             
             await ctx.Reply($"{Emojis.Success} Group deleted.");
+        }
+
+            public async Task GroupFrontPercent(Context ctx, PKGroup target)
+        {
+            await using var conn = await _db.Obtain();
+            
+            var targetSystem = await GetGroupSystem(ctx, target, conn);
+            ctx.CheckSystemPrivacy(targetSystem, targetSystem.FrontHistoryPrivacy);
+
+            string durationStr = ctx.RemainderOrNull() ?? "30d";
+            
+            var now = SystemClock.Instance.GetCurrentInstant();
+
+            var rangeStart = DateUtils.ParseDateTime(durationStr, true, targetSystem.Zone);
+            if (rangeStart == null) throw Errors.InvalidDateTime(durationStr);
+            if (rangeStart.Value.ToInstant() > now) throw Errors.FrontPercentTimeInFuture;
+
+            var title = new StringBuilder($"Frontpercent of {target.DisplayName ?? target.Name} (`{target.Hid}`) in ");
+            if (targetSystem.Name != null) 
+                title.Append($"{targetSystem.Name} (`{targetSystem.Hid}`)");
+            else
+                title.Append($"`{targetSystem.Hid}`");
+
+            var ignoreNoFronters = ctx.MatchFlag("fo", "fronters-only");
+            var frontpercent = await _db.Execute(c => _repo.GetFrontBreakdown(c, targetSystem.Id, target.Id, rangeStart.Value.ToInstant(), now));
+            await ctx.Reply(embed: await _embeds.CreateFrontPercentEmbed(frontpercent, targetSystem, target, targetSystem.Zone, ctx.LookupContextFor(targetSystem), title.ToString(), ignoreNoFronters));
         }
 
         private async Task<PKSystem> GetGroupSystem(Context ctx, PKGroup target, IPKConnection conn)

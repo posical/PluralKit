@@ -3,9 +3,9 @@ using System.Linq;
 using System.Text;
 using System.Threading.Tasks;
 
-using DSharpPlus.Entities;
-
 using Humanizer;
+
+using Myriad.Builders;
 
 using NodaTime;
 
@@ -78,7 +78,7 @@ namespace PluralKit.Bot
             return p;
         }
 
-        public static async Task RenderMemberList(this Context ctx, LookupContext lookupCtx, IDatabase db, SystemId system, string embedTitle, MemberListOptions opts)
+        public static async Task RenderMemberList(this Context ctx, LookupContext lookupCtx, IDatabase db, SystemId system, string embedTitle, string color, MemberListOptions opts)
         {
             // We take an IDatabase instead of a IPKConnection so we don't keep the handle open for the entire runtime
             // We wanna release it as soon as the member list is actually *fetched*, instead of potentially minutes later (paginate timeout)
@@ -87,13 +87,13 @@ namespace PluralKit.Bot
                 .ToList();
 
             var itemsPerPage = opts.Type == ListType.Short ? 25 : 5;
-            await ctx.Paginate(members.ToAsyncEnumerable(), members.Count, itemsPerPage, embedTitle, Renderer);
+            await ctx.Paginate(members.ToAsyncEnumerable(), members.Count, itemsPerPage, embedTitle, color, Renderer);
 
             // Base renderer, dispatches based on type
-            Task Renderer(DiscordEmbedBuilder eb, IEnumerable<ListedMember> page)
+            Task Renderer(EmbedBuilder eb, IEnumerable<ListedMember> page)
             {
                 // Add a global footer with the filter/sort string + result count
-                eb.WithFooter($"{opts.CreateFilterString()}. {"result".ToQuantity(members.Count)}.");
+                eb.Footer(new($"{opts.CreateFilterString()}. {"result".ToQuantity(members.Count)}."));
                 
                 // Then call the specific renderers
                 if (opts.Type == ListType.Short)
@@ -104,7 +104,7 @@ namespace PluralKit.Bot
                 return Task.CompletedTask;
             }
 
-            void ShortRenderer(DiscordEmbedBuilder eb, IEnumerable<ListedMember> page)
+            void ShortRenderer(EmbedBuilder eb, IEnumerable<ListedMember> page)
             {  
                 // We may end up over the description character limit
                 // so run it through a helper that "makes it work" :)
@@ -122,7 +122,7 @@ namespace PluralKit.Bot
                 }));
             }
             
-            void LongRenderer(DiscordEmbedBuilder eb, IEnumerable<ListedMember> page)
+            void LongRenderer(EmbedBuilder eb, IEnumerable<ListedMember> page)
             {
                 var zone = ctx.System?.Zone ?? DateTimeZone.Utc;
                 foreach (var m in page)
@@ -162,7 +162,7 @@ namespace PluralKit.Bot
                     if (m.MemberVisibility == PrivacyLevel.Private)
                         profile.Append("\n*(this member is hidden)*");
                     
-                    eb.AddField(m.NameFor(ctx), profile.ToString().Truncate(1024));
+                    eb.Field(new(m.NameFor(ctx), profile.ToString().Truncate(1024)));
                 }
             }
         }

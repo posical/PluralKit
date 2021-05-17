@@ -1,4 +1,6 @@
 ﻿#nullable enable
+using System.Text.RegularExpressions;
+
 namespace PluralKit.Core
 {
     public class SystemPatch: PatchObject
@@ -7,6 +9,7 @@ namespace PluralKit.Core
         public Partial<string?> Description { get; set; }
         public Partial<string?> Tag { get; set; }
         public Partial<string?> AvatarUrl { get; set; }
+        public Partial<string?> Color { get; set; }
         public Partial<string?> Token { get; set; }
         public Partial<string> UiTz { get; set; }
         public Partial<PrivacyLevel> DescriptionPrivacy { get; set; }
@@ -22,6 +25,7 @@ namespace PluralKit.Core
             .With("description", Description)
             .With("tag", Tag)
             .With("avatar_url", AvatarUrl)
+            .With("color", Color)
             .With("token", Token)
             .With("ui_tz", UiTz)
             .With("description_privacy", DescriptionPrivacy)
@@ -31,5 +35,14 @@ namespace PluralKit.Core
             .With("front_history_privacy", FrontHistoryPrivacy)
             .With("pings_enabled", PingsEnabled)
             .With("latch_timeout", LatchTimeout);
+
+        public new void CheckIsValid()
+        {
+            if (AvatarUrl.Value != null && !MiscUtils.TryMatchUri(AvatarUrl.Value, out var avatarUri))
+                throw new InvalidPatchException("avatar_url");
+            if (Color.Value != null && (!Regex.IsMatch(Color.Value, "^[0-9a-fA-F]{6}$")))
+                throw new InvalidPatchException("color");
+        }
+
     }
 }

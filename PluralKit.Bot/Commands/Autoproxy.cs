@@ -1,9 +1,10 @@
 using System;
 using System.Threading.Tasks;
 
-using DSharpPlus.Entities;
-
 using Humanizer;
+
+using Myriad.Builders;
+using Myriad.Types;
 
 using NodaTime;
 
@@ -84,10 +85,11 @@ namespace PluralKit.Bot
             await ctx.Reply($"{Emojis.Success} Autoproxy set to **{member.NameFor(ctx)}** in this server.");
         }
 
-        private async Task<DiscordEmbed> CreateAutoproxyStatusEmbed(Context ctx)
+        private async Task<Embed> CreateAutoproxyStatusEmbed(Context ctx)
         {
             var commandList = "**pk;autoproxy latch** - Autoproxies as last-proxied member\n**pk;autoproxy front** - Autoproxies as current (first) fronter\n**pk;autoproxy <member>** - Autoproxies as a specific member";
-            var eb = new DiscordEmbedBuilder().WithTitle($"Current autoproxy status (for {ctx.Guild.Name.EscapeMarkdown()})");
+            var eb = new EmbedBuilder()
+                .Title($"Current autoproxy status (for {ctx.Guild.Name.EscapeMarkdown()})");
             
             var fronters = ctx.MessageContext.LastSwitchMembers;
             var relevantMember = ctx.MessageContext.AutoproxyMode switch
@@ -98,35 +100,36 @@ namespace PluralKit.Bot
             };
 
             switch (ctx.MessageContext.AutoproxyMode) {
-                case AutoproxyMode.Off: eb.WithDescription($"Autoproxy is currently **off** in this server. To enable it, use one of the following commands:\n{commandList}");
+                case AutoproxyMode.Off:
+                    eb.Description($"Autoproxy is currently **off** in this server. To enable it, use one of the following commands:\n{commandList}");
                     break;
                 case AutoproxyMode.Front:
                 {
                     if (fronters.Length == 0)
-                        eb.WithDescription("Autoproxy is currently set to **front mode** in this server, but there are currently no fronters registered. Use the `pk;switch` command to log a switch.");
+                        eb.Description("Autoproxy is currently set to **front mode** in this server, but there are currently no fronters registered. Use the `pk;switch` command to log a switch.");
                     else
                     {
                         if (relevantMember == null) 
                             throw new ArgumentException("Attempted to print member autoproxy status, but the linked member ID wasn't found in the database. Should be handled appropriately.");
-                        eb.WithDescription($"Autoproxy is currently set to **front mode** in this server. The current (first) fronter is **{relevantMember.NameFor(ctx).EscapeMarkdown()}** (`{relevantMember.Hid}`). To disable, type `pk;autoproxy off`.");
+                        eb.Description($"Autoproxy is currently set to **front mode** in this server. The current (first) fronter is **{relevantMember.NameFor(ctx).EscapeMarkdown()}** (`{relevantMember.Hid}`). To disable, type `pk;autoproxy off`.");
                     }
 
                     break;
                 }
                 // AutoproxyMember is never null if Mode is Member, this is just to make the compiler shut up
                 case AutoproxyMode.Member when relevantMember != null: {
-                    eb.WithDescription($"Autoproxy is active for member **{relevantMember.NameFor(ctx)}** (`{relevantMember.Hid}`) in this server. To disable, type `pk;autoproxy off`.");
+                    eb.Description($"Autoproxy is active for member **{relevantMember.NameFor(ctx)}** (`{relevantMember.Hid}`) in this server. To disable, type `pk;autoproxy off`.");
                     break;
                 }
                 case AutoproxyMode.Latch:
-                    eb.WithDescription("Autoproxy is currently set to **latch mode**, meaning the *last-proxied member* will be autoproxied. To disable, type `pk;autoproxy off`.");
+                    eb.Description("Autoproxy is currently set to **latch mode**, meaning the *last-proxied member* will be autoproxied. To disable, type `pk;autoproxy off`.");
                     break;
                 
                 default: throw new ArgumentOutOfRangeException();
             }
 
             if (!ctx.MessageContext.AllowAutoproxy) 
-                eb.AddField("\u200b", $"{Emojis.Note} Autoproxy is currently **disabled** for your account (<@{ctx.Author.Id}>). To enable it, use `pk;autoproxy account enable`.");
+                eb.Field(new("\u200b", $"{Emojis.Note} Autoproxy is currently **disabled** for your account (<@{ctx.Author.Id}>). To enable it, use `pk;autoproxy account enable`."));
 
             return eb.Build();
         }
@@ -140,40 +143,43 @@ namespace PluralKit.Bot
                     : (Duration?) null;
                 
                 if (timeout == null)
-                    await ctx.Reply($"You do not have a custom autoproxy timeout duration set. The default latch timeout duration is {ProxyMatcher.DefaultLatchExpiryTime.ToTimeSpan().Humanize()}.");
+                    await ctx.Reply($"You do not have a custom autoproxy timeout duration set. The default latch timeout duration is {ProxyMatcher.DefaultLatchExpiryTime.ToTimeSpan().Humanize(4)}.");
                 else if (timeout == Duration.Zero)
                     await ctx.Reply("Latch timeout is currently **disabled** for your system. Latch mode autoproxy will never time out.");
                 else
-                    await ctx.Reply($"The current latch timeout duration for your system is {timeout.Value.ToTimeSpan().Humanize()}.");
+                    await ctx.Reply($"The current latch timeout duration for your system is {timeout.Value.ToTimeSpan().Humanize(4)}.");
                 return;
             }
 
-            // todo: somehow parse a more human-friendly date format
-            int newTimeoutHours;
-            if (ctx.Match("off", "stop", "cancel", "no", "disable", "remove")) newTimeoutHours = 0;
-            else if (ctx.Match("reset", "default")) newTimeoutHours = -1;
-            else if (!int.TryParse(ctx.RemainderOrNull(), out newTimeoutHours)) throw new PKError("Duration must be a number of hours.");
-
-            int? overflow = null;
-            if (newTimeoutHours > 100000)
+            Duration? newTimeout;
+            Duration overflow = Duration.Zero;
+            if (ctx.Match("off", "stop", "cancel", "no", "disable", "remove")) newTimeout = Duration.Zero;
+            else if (ctx.Match("reset", "default")) newTimeout = null;
+            else
             {
-                // sanity check to prevent seconds overflow if someone types in 999999999
-                overflow = newTimeoutHours;
-                newTimeoutHours = 0;
+                var timeoutStr = ctx.RemainderOrNull();
+                var timeoutPeriod = DateUtils.ParsePeriod(timeoutStr);
+                if (timeoutPeriod == null) throw new PKError($"Could not parse '{timeoutStr}' as a valid duration. Try using a syntax such as \"3h5m\" (i.e. 3 hours and 5 minutes).");
+                if (timeoutPeriod.Value.TotalHours > 100000)
+                {
+                    // sanity check to prevent seconds overflow if someone types in 999999999
+                    overflow = timeoutPeriod.Value;
+                    newTimeout = Duration.Zero;
+                }
+                else newTimeout = timeoutPeriod;
             }
 
-            var newTimeout = newTimeoutHours > -1 ? Duration.FromHours(newTimeoutHours) : (Duration?) null;
             await _db.Execute(conn => _repo.UpdateSystem(conn, ctx.System.Id, 
                 new SystemPatch { LatchTimeout = (int?) newTimeout?.TotalSeconds }));
             
-            if (newTimeoutHours == -1)
-                await ctx.Reply($"{Emojis.Success} Latch timeout reset to default ({ProxyMatcher.DefaultLatchExpiryTime.ToTimeSpan().Humanize()}).");
-            else if (newTimeoutHours == 0 && overflow != null)
-                await ctx.Reply($"{Emojis.Success} Latch timeout disabled. Latch mode autoproxy will never time out. ({overflow} hours is too long)");
-            else if (newTimeoutHours == 0)
+            if (newTimeout == null)
+                await ctx.Reply($"{Emojis.Success} Latch timeout reset to default ({ProxyMatcher.DefaultLatchExpiryTime.ToTimeSpan().Humanize(4)}).");
+            else if (newTimeout == Duration.Zero && overflow != Duration.Zero)
+                await ctx.Reply($"{Emojis.Success} Latch timeout disabled. Latch mode autoproxy will never time out. ({overflow.ToTimeSpan().Humanize(4)} is too long)");
+            else if (newTimeout == Duration.Zero)
                 await ctx.Reply($"{Emojis.Success} Latch timeout disabled. Latch mode autoproxy will never time out.");
             else
-                await ctx.Reply($"{Emojis.Success} Latch timeout set to {newTimeout.Value!.ToTimeSpan().Humanize()}.");
+                await ctx.Reply($"{Emojis.Success} Latch timeout set to {newTimeout.Value!.ToTimeSpan().Humanize(4)}.");
         }
 
         public async Task AutoproxyAccount(Context ctx)
@@ -188,7 +194,7 @@ namespace PluralKit.Bot
             else
             {
                 var statusString = ctx.MessageContext.AllowAutoproxy ? "enabled" : "disabled";
-                await ctx.Reply($"Autoproxy is currently **{statusString}** for account <@{ctx.Author.Id}>.", mentions: new IMention[]{});
+                await ctx.Reply($"Autoproxy is currently **{statusString}** for account <@{ctx.Author.Id}>.");
             }
         }
 
@@ -197,12 +203,12 @@ namespace PluralKit.Bot
             var statusString = allow ? "enabled" : "disabled";
             if (ctx.MessageContext.AllowAutoproxy == allow)
             {
-                await ctx.Reply($"{Emojis.Note} Autoproxy is already {statusString} for account <@{ctx.Author.Id}>.", mentions: new IMention[]{});
+                await ctx.Reply($"{Emojis.Note} Autoproxy is already {statusString} for account <@{ctx.Author.Id}>.");
                 return;
             }
             var patch = new AccountPatch { AllowAutoproxy = allow };
             await _db.Execute(conn => _repo.UpdateAccount(conn, ctx.Author.Id, patch));
-            await ctx.Reply($"{Emojis.Success} Autoproxy {statusString} for account <@{ctx.Author.Id}>.", mentions: new IMention[]{});
+            await ctx.Reply($"{Emojis.Success} Autoproxy {statusString} for account <@{ctx.Author.Id}>.");
         }
 
         private Task UpdateAutoproxy(Context ctx, AutoproxyMode autoproxyMode, MemberId? autoproxyMember)
