@@ -11,7 +11,7 @@ Running the bot requires [.NET 5](https://dotnet.microsoft.com/download) and a P
 Optionally, it can integrate with [Sentry](https://sentry.io/welcome/) for error reporting and [InfluxDB](https://www.influxdata.com/products/influxdb-overview/) for aggregate statistics.
 
 # Configuration
-Configuring the bot is done through a JSON configuration file. An example of the configuration format can be seen in [`pluralkit.conf.example`](https://github.com/xSke/PluralKit/blob/master/pluralkit.conf.example).
+Configuring the bot is done through a JSON configuration file. An example of the configuration format can be seen in [`pluralkit.conf.example`](https://github.com/PluralKit/PluralKit/blob/master/pluralkit.conf.example).
 The configuration file needs to be placed in the bot's working directory (usually the repository root) and must be called `pluralkit.conf`.
 
 The configuration file is in JSON format (albeit with a `.conf` extension). The following keys are available (using `.` to indicate a nested object level), bolded key names are required:
@@ -31,7 +31,7 @@ The bot can also take configuration from environment variables, which will overr
 ## Docker
 The easiest way to get the bot running is with Docker. The repository contains a `docker-compose.yml` file ready to use.
 
-* Clone this repository: `git clone https://github.com/xSke/PluralKit`
+* Clone this repository: `git clone https://github.com/PluralKit/PluralKit`
 * Create a `pluralkit.conf` file in the same directory as `docker-compose.yml` containing at least a `PluralKit.Bot.Token` field
   * (`PluralKit.Database` is overridden in `docker-compose.yml` to point to the Postgres container)
 * Build the bot: `docker-compose build`
@@ -39,7 +39,7 @@ The easiest way to get the bot running is with Docker. The repository contains a
 
 In other words:
 ```
-$ git clone https://github.com/xSke/PluralKit
+$ git clone https://github.com/PluralKit/PluralKit
 $ cd PluralKit
 $ cp pluralkit.conf.example pluralkit.conf
 $ nano pluralkit.conf  # (or vim, or whatever)
@@ -47,13 +47,25 @@ $ docker-compose up -d
 ```
 
 ## Manually
-* Install the .NET 5 SDK (see https://dotnet.microsoft.com/download)
-* Clone this repository: `git clone https://github.com/xSke/PluralKit`
+* Install the .NET 6 SDK (see https://dotnet.microsoft.com/download)
+* Clone this repository: `git clone https://github.com/PluralKit/PluralKit`
 * Create and fill in a `pluralkit.conf` file in the same directory as `docker-compose.yml`
 * Run the bot: `dotnet run --project PluralKit.Bot`
   * Alternatively, `dotnet build -c Release -o build/`, then `dotnet build/PluralKit.Bot.dll`
 
 (tip: use `scripts/run-test-db.sh` to run a temporary PostgreSQL database on your local system. Requires Docker.)
+
+## Scheduled Tasks worker
+
+There is a scheduled tasks worker that needs to be ran separately from the bot. This handles cleaning up the database, and updating statistics (system/member/etc counts, shown in the `pk;stats` embed).
+
+Note: This worker is *not required*, and the bot will function correctly without it.
+
+If you are running the bot via docker-compose, this is set up automatically.
+
+If you run the bot manually you can run the worker as such:
+* `dotnet run --project PluralKit.ScheduledTasks`
+* or if you used `dotnet build` rather than `dotnet run` to run the bot: `dotnet build/PluralKit.ScheduledTasks.dll`
 
 # Upgrading database from legacy version
 If you have an instance of the Python version of the bot (from the `legacy` branch), you may need to take extra database migration steps.

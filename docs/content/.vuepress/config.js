@@ -18,7 +18,7 @@ module.exports = {
   },
 
   themeConfig: {
-    repo: 'xSke/PluralKit',
+    repo: 'PluralKit/PluralKit',
     docsDir: 'docs/content/',
     docsBranch: 'main',
     editLinks: true,
@@ -27,6 +27,7 @@ module.exports = {
     nextLinks: true,
     prevLinks: true,
     nav: [
+      { text: "Web dashboard", link: "https://dash.pluralkit.me" },
       { text: "Support server", link: "https://discord.gg/PczBt78" },
       { text: "Invite bot", link: "https://discord.com/oauth2/authorize?client_id=466378653216014359&scope=bot%20applications.commands&permissions=536995904" }
     ],
@@ -41,7 +42,6 @@ module.exports = {
           "/getting-started",
           "/user-guide",
           "/command-list",
-          "/api-documentation",
           "/privacy-policy",
           "/faq",
           "/tips-and-tricks"
@@ -58,18 +58,25 @@ module.exports = {
           "/staff/compatibility",
         ]
       },
+      {
+        title: "API Documentation",
+        collapsable: false,
+        children: [
+          "/api/changelog",
+          "/api/reference",
+          "/api/endpoints",
+          "/api/models",
+          "/api/errors",
+          "/api/dispatch"
+        ]
+      },
       ["https://discord.gg/PczBt78", "Join the support server"],
     ]
   },
 
   plugins: [
     '@vuepress/plugin-back-to-top',
-    [
-      '@vuepress/google-analytics',
-      {
-        "ga": "UA-173942267-1"
-      }
-    ],
+    ["plausible-analytics", { domain: 'plausible.pluralkit.me' }],
     ["vuepress-plugin-clean-urls", { normalSuffix: "/" }],
   ],
 }

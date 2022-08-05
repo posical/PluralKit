@@ -1,6 +1,5 @@
-﻿using Myriad.Types;
+using Myriad.Types;
 
-namespace Myriad.Gateway
-{
-    public record GuildUpdateEvent: Guild, IGatewayEvent;
-}
+namespace Myriad.Gateway;
+
+public record GuildUpdateEvent: Guild, IGatewayEvent;

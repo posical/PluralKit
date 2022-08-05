@@ -1,7 +1,6 @@
-﻿namespace Myriad.Rest.Types
+namespace Myriad.Rest.Types;
+
+public record ModifyGuildMemberRequest
 {
-    public record ModifyGuildMemberRequest
-    {
-        public string? Nick { get; init; }
-    }
+    public string? Nick { get; init; }
 }

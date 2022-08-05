@@ -74,6 +74,23 @@ If you want to remove your system tag, just type `pk;system tag` with no extra p
 to bump it over that limit. PluralKit will warn you if you have a member name/tag combination that will bring the combined username above the limit.
 You can either make the member name or the system tag shorter to solve this. 
     
+### System server tags
+If you'd like to set a system tag (as above), but only for a specific server, you can set the *system server tag*. This will override the global system tag, but only in the server you set it in. For example:
+
+```
+pk;system servertag 🛰️
+```
+
+The server tag applies to the same server you run the command in, so this command doesn't function in DMs.
+
+To remove an existing server-specific system tag, use the command `pk;system servertag -clear`.
+
+::: tip
+It is possible to disable the system tag for a specific server. Use the command `pk;system servertag -disable`.
+
+To re-enable it, use the command `pk;system servertag -enable`.
+:::
+
 ### Adding or removing Discord accounts to the system
 If you have multiple Discord accounts you want to use the same system on, you don't need to create multiple systems.
 Instead, you can *link* the same system to multiple accounts.
@@ -269,7 +286,7 @@ You can have any proxy tags you want, including one containing emojis.
 You can now type a message enclosed in your proxy tags, and it'll be deleted by PluralKit and reposted with the appropriate member name and avatar (if set).
 
 **NB:** If you want `<angle brackets>` as proxy tags, there is currently a bug where custom server emojis will (wrongly)
-be interpreted as proxying with that member (see [issue #37](https://github.com/xSke/PluralKit/issues/37)). The current workaround is to use different proxy tags.
+be interpreted as proxying with that member (see [issue #37](https://github.com/PluralKit/PluralKit/issues/37)). The current workaround is to use different proxy tags.
 
 ### Using multiple distinct proxy tag pairs
 If you'd like to proxy a member in multiple ways (for example, a name or a nickname, uppercase and lowercase variants, etc), you can add multiple tag pairs.
@@ -421,7 +438,7 @@ Absolute times will be interpreted in the [system time zone](#setting-a-system-t
     pk;switch move 1h
     pk;switch move 4d12h
     pk;switch move 2 PM
-    pk;switch move May 8th 4:30 PM
+    pk;switch move May 8, 4:30 PM
 
 Note that you can't move a switch *before* the *previous switch*, to avoid breaking consistency. Here's a rough ASCII-art illustration of this:
 
@@ -462,6 +479,15 @@ To look at the per-member breakdown of the front over a given time period, use t
     pk;system qazws frontpercent 100d12h
 
 Note that in cases of switches with multiple members, each involved member will have the full length of the switch counted towards it. This means that the percentages may add up to over 100%.
+<br> It is possible to disable this with the `-flat` flag; percentages will then add up to 100%.
+
+::: tip
+If you use the `switch-out` function, the time when no-one was fronting will show up in front history as "no fronter". To disable this, use the `-fronters-only`, or `-fo` flag:
+
+```
+pk;system frontpercent -fronters-only
+```
+:::
 
 ## Member groups
 PluralKit allows you to categorize system members in different **groups**.
@@ -594,7 +620,7 @@ pk;import https://link/to/the/data/file.json
 ```
 *(alternatively, run `pk;import` by itself and attach the .json file)*
 
-Note that while Tupperbox supports features such as per-member system tags PluralKit does not. Pluralkit also does not currently support exporting/importing member groups. 
+Note that while Tupperbox supports features such as per-member system tags, PluralKit does not. PluralKit also does not currently support importing or exporting member groups.
 PluralKit will warn you when you're importing a Tupperbox file that makes use of such features, as they will not carry over. 
 
 ### Importing from PluralKit

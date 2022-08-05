@@ -1,4 +1,3 @@
-﻿namespace Myriad.Gateway
-{
-    public record GuildDeleteEvent(ulong Id, bool Unavailable): IGatewayEvent;
-}
+namespace Myriad.Gateway;
+
+public record GuildDeleteEvent(ulong Id, bool Unavailable): IGatewayEvent;

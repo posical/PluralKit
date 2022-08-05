@@ -1,6 +1,5 @@
-﻿using Myriad.Types;
+using Myriad.Types;
 
-namespace Myriad.Gateway
-{
-    public record InteractionCreateEvent: Interaction, IGatewayEvent;
-}
+namespace Myriad.Gateway;
+
+public record InteractionCreateEvent: Interaction, IGatewayEvent;
