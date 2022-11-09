@@ -2,7 +2,7 @@
     import { Row, Col, Input, Button, Label, Alert, Spinner, Accordion, AccordionItem, CardTitle } from 'sveltestrap';
     import { Group } from '../../api/types';
     import api from '../../api';
-    import autosize from 'svelte-autosize';
+    import { autoresize } from 'svelte-textarea-autoresize';
     import { createEventDispatcher } from 'svelte';
     import FaPlus from 'svelte-icons/fa/FaPlus.svelte';
 
@@ -44,6 +44,9 @@
                 data.color = input.color.slice(1, input.color.length);
             }
         }
+
+        // trim all string fields
+        Object.keys(data).forEach(k => data[k] = typeof data[k] == "string" ? data[k].trim() : data[k]);
 
         err = err;
         if (err.length > 0) return;
@@ -167,7 +170,7 @@
             <Button size="sm" color="primary" on:click={() => input.description = descriptions[2]}>Template 3</Button>
             {/if}
             <br>
-            <textarea class="form-control" bind:value={input.description} maxlength={1000} use:autosize />
+            <textarea class="form-control" bind:value={input.description} maxlength={1000} use:autoresize />
         </div>
         {#if !loading && input.name}<Button style="flex: 0" color="primary" on:click={submit}>Submit</Button>
         {:else if !input.name }<Button style="flex: 0" color="primary" disabled>Submit</Button>

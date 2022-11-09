@@ -3,6 +3,7 @@
     import moment from 'moment';
     import { toHTML } from 'discord-markdown';
     import parseTimestamps from '../../api/parse-timestamps';
+    import resizeMedia from '../../api/resize-media';
     import twemoji from 'twemoji';
 
     import { System } from '../../api/types';
@@ -13,6 +14,8 @@
 
     let htmlDescription: string;
     let htmlName: string;
+    let htmlPronouns: string;
+
     if (user.description) { 
         htmlDescription = toHTML(parseTimestamps(user.description), {embed: true});
     } else {
@@ -21,6 +24,10 @@
 
     if (user.name) {
         htmlName = toHTML(user.name);
+    }
+
+    if (user.pronouns) {
+        htmlPronouns = toHTML(user.pronouns);
     }
 
     let created = moment(user.created).format("MMM D, YYYY");
@@ -32,11 +39,13 @@
     let descriptionElement: any;
     let nameElement: any;
     let tagElement: any;
+    let pronounElement: any;
 
     $: if (settings && settings.appearance.twemoji) {
         if (descriptionElement) twemoji.parse(descriptionElement);
         if (nameElement) twemoji.parse(nameElement);
         if (tagElement) twemoji.parse(tagElement);
+        if (pronounElement) twemoji.parse(pronounElement);
     }
 
 </script>
@@ -55,6 +64,11 @@
     {#if user.tag}
     <Col xs={12} lg={4} class="mb-2">
         <span bind:this={tagElement}><b>Tag:</b> {user.tag}</span>
+    </Col>
+    {/if}
+    {#if user.pronouns}
+    <Col xs={12} lg={4} class="mb-2">
+        <span bind:this={pronounElement}><b>Pronouns:</b> {@html htmlPronouns}</span>
     </Col>
     {/if}
     {#if user.created && !isPublic}
@@ -88,7 +102,7 @@
     {@html htmlDescription}
 </div>
 {#if (user.banner && ((settings && settings.appearance.banner_bottom) || !settings))}
-<img src={user.banner} alt="system banner" class="w-100 mb-3 rounded" style="max-height: 12em; object-fit: cover"/>
+<img on:click={toggleBannerModal} src={resizeMedia(user.banner, [1200, 480])} alt="system banner" class="w-100 mb-3 rounded" style="max-height: 13em; object-fit: cover; cursor: pointer;"/>
 {/if}
 {#if !isPublic}
 <Button style="flex: 0" color="primary" on:click={() => editMode = true} aria-label="edit system information">Edit</Button>

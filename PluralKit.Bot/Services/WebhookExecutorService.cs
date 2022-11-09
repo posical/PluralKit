@@ -13,8 +13,11 @@ using Myriad.Rest.Types.Requests;
 using Myriad.Types;
 
 using Newtonsoft.Json;
+using Newtonsoft.Json.Linq;
 
 using Serilog;
+
+using PluralKit.Core;
 
 namespace PluralKit.Bot;
 
@@ -115,7 +118,7 @@ public class WebhookExecutorService
 
         var webhookReq = new ExecuteWebhookRequest
         {
-            Username = FixProxyName(req.Name).Truncate(80),
+            Username = req.Name.FixProxyName().Truncate(80),
             Content = content,
             AllowedMentions = allowedMentions,
             AvatarUrl = !string.IsNullOrWhiteSpace(req.AvatarUrl) ? req.AvatarUrl : null,
@@ -147,6 +150,59 @@ public class WebhookExecutorService
             {
                 webhookMessage =
                     await _rest.ExecuteWebhook(webhook.Id, webhook.Token, webhookReq, files, req.ThreadId);
+            }
+            catch (BadRequestException e)
+            {
+                // explanation for hacky: I don't care if this code fails, it just means it wasn't a username error
+                try
+                {
+                    var json = JsonConvert.DeserializeObject<JObject>(e.FormError);
+                    var error = json.Value<JObject>("username").Value<JArray>("_errors").First.Value<string>("message");
+
+                    await _rest.CreateMessage(req.ChannelId, new MessageRequest
+                    {
+                        Content = $"{Emojis.Error} Discord rejected your proxy name: {error.AsCode()}",
+                        AllowedMentions = new AllowedMentions { Parse = { } },
+                    });
+
+                    Sentry.SentrySdk.CaptureException(e);
+
+                    // this exception is ignored in the message handler lol
+                    throw new ProxyService.ProxyChecksFailedException("_internal_discord_rejected_message");
+                }
+                catch (Exception ex)
+                {
+                    // this exception is expected, see comment above
+                    if (ex.GetType() == typeof(ProxyService.ProxyChecksFailedException))
+#pragma warning disable CA2200
+                        throw ex;
+#pragma warning restore CA2200
+                    else
+                        // if something breaks, just ignore it and throw the original exception
+                        throw e;
+                }
+            }
+            catch (RequestEntityTooLargeException e)
+            {
+                try
+                {
+                    await _rest.CreateMessage(req.ChannelId, new MessageRequest
+                    {
+                        Content = $"{Emojis.Error} One or more of the files attached to this message were not able to be proxied because they were too large.",
+                        AllowedMentions = new AllowedMentions { Parse = { } },
+                    });
+
+                    throw new ProxyService.ProxyChecksFailedException("_internal_discord_rejected_message");
+                }
+                catch (Exception ex)
+                {
+                    if (ex.GetType() == typeof(ProxyService.ProxyChecksFailedException))
+#pragma warning disable CA2200
+                        throw ex;
+#pragma warning restore CA2200
+                    else
+                        throw e;
+                }
             }
             catch (JsonReaderException)
             {
@@ -243,21 +299,50 @@ public class WebhookExecutorService
         return chunks;
     }
 
-    private string FixProxyName(string name) => FixSingleCharacterName(FixClyde(name));
+}
 
-    private string FixClyde(string name)
+public static class ProxyNameExt
+{
+    public static string FixProxyName(this string name) => name
+        .FixClyde()
+        .FixHere()
+        .FixEveryone()
+        .FixDiscord()
+        .FixBackticks()
+        .FixSingleCharacterName();
+    // .ThrowOnInvalidCharacters();
+
+    static string ThrowOnInvalidCharacters(this string name)
     {
-        static string Replacement(Match m) => m.Groups[1].Value + "\u200A" + m.Groups[2].Value;
-
-        // Adds a Unicode hair space (\u200A) between the "c" and the "lyde" to avoid Discord matching it
-        // since Discord blocks webhooks containing the word "Clyde"... for some reason. /shrug
-        return Regex.Replace(name, "(c)(lyde)", Replacement, RegexOptions.IgnoreCase);
+        var invalidCharacters = new[] { "@", "#", ":" };
+        if (invalidCharacters.Any(x => name.Contains(x)))
+            throw new PKError("Due to Discord limitations, proxy names cannot contain the characters `@`, `#` or `:`. "
+                    + $"The webhook's name, {name.AsCode()}, contains one or more of these characters.");
+        return name;
     }
 
-    private string FixSingleCharacterName(string proxyName)
+    static string FixHere(this string name)
+        => Regex.Replace(name, "^(h)(ere)$", Replacement, RegexOptions.IgnoreCase);
+
+    static string FixEveryone(this string name)
+        => Regex.Replace(name, "^(e)(veryone)$", Replacement, RegexOptions.IgnoreCase);
+
+    static string FixBackticks(this string name)
+        => Regex.Replace(name, "(`)(``)", Replacement, RegexOptions.IgnoreCase);
+
+    static string FixDiscord(this string name)
+        => Regex.Replace(name, "(d)(iscord)", Replacement, RegexOptions.IgnoreCase);
+
+    // Adds a Unicode hair space (\u200A) between the "c" and the "lyde" to avoid Discord matching it
+    // since Discord blocks webhooks containing the word "Clyde"... for some reason. /shrug
+    static string FixClyde(this string name)
+        => Regex.Replace(name, "(c)(lyde)", Replacement, RegexOptions.IgnoreCase);
+
+    static string FixSingleCharacterName(this string proxyName)
     {
         if (proxyName.Length == 1)
             return proxyName + "\u17b5";
         return proxyName;
     }
+    static string Replacement(Match m) => m.Groups[1].Value + "\u200A" + m.Groups[2].Value;
 }

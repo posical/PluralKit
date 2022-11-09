@@ -11,7 +11,20 @@ namespace PluralKit.Bot;
 
 public class ListOptions
 {
-    public SortProperty SortProperty { get; set; } = SortProperty.Name;
+    private SortProperty? _sortProperty { get; set; }
+    public SortProperty SortProperty
+    {
+        get => _sortProperty ?? SortProperty.Name;
+        set
+        {
+            if (_sortProperty != null)
+                throw new PKError("Cannot sort in multiple ways at the same time. Please choose only one sorting method.");
+
+            _sortProperty = value;
+        }
+    }
+
+
     public bool Reverse { get; set; }
 
     public PrivacyLevel? PrivacyFilter { get; set; } = PrivacyLevel.Public;
@@ -27,6 +40,19 @@ public class ListOptions
     public bool IncludeAvatar { get; set; }
     public bool IncludePronouns { get; set; }
     public bool IncludeDisplayName { get; set; }
+    public bool IncludeBirthday { get; set; }
+
+    // hacky but works, remember to update this when more include flags are added 
+    public int includedCount => new[] {
+        IncludeMessageCount,
+        IncludeLastSwitch,
+        IncludeLastMessage,
+        IncludeCreated,
+        IncludeAvatar,
+        IncludePronouns,
+        IncludeDisplayName,
+        IncludeBirthday,
+    }.Sum(x => Convert.ToInt32(x));
 
     public string CreateFilterString()
     {
@@ -147,6 +173,14 @@ public static class ListOptionsExt
         })
                 // Lastly, add a by-name fallback order for collisions (generally hits w/ lots of null values)
                 .ThenBy(g => g.NameFor(ctx), culture);
+    }
+
+    public static void AssertIsValid(this ListOptions opts)
+    {
+        if (opts.Type == ListType.Short && opts.includedCount > 1)
+            throw new PKError("The short list does not support showing information from multiple flags. Try using the full list instead.");
+
+        // the check for multiple *sorting* property flags is done in SortProperty setter
     }
 }
 

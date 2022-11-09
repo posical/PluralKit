@@ -19,11 +19,13 @@ public partial class CommandTree
     public static Command SystemFronter = new Command("system fronter", "system [system] fronter", "Shows a system's fronter(s)");
     public static Command SystemFrontHistory = new Command("system fronthistory", "system [system] fronthistory", "Shows a system's front history");
     public static Command SystemFrontPercent = new Command("system frontpercent", "system [system] frontpercent [timespan]", "Shows a system's front breakdown");
+    public static Command SystemId = new Command("system id", "system [system] id", "Prints your system's id.");
     public static Command SystemPrivacy = new Command("system privacy", "system [system] privacy <description|members|fronter|fronthistory|all> <public|private>", "Changes your system's privacy settings");
     public static Command ConfigTimezone = new Command("config timezone", "config timezone [timezone]", "Changes your system's time zone");
-    public static Command ConfigPing = new Command("config ping", "config ping <enable|disable>", "Changes your system's ping preferences");
-    public static Command ConfigAutoproxyAccount = new Command("config autoproxy account", "autoproxy account [on|off]", "Toggles autoproxy globally for the current account");
-    public static Command ConfigAutoproxyTimeout = new Command("config autoproxy timeout", "autoproxy timeout [<duration>|off|reset]", "Sets the latch timeout duration for your system");
+    public static Command ConfigPing = new Command("config ping", "config ping [on|off]", "Changes your system's ping preferences");
+    public static Command ConfigAutoproxyAccount = new Command("config autoproxy account", "config autoproxy account [on|off]", "Toggles autoproxy globally for the current account");
+    public static Command ConfigAutoproxyTimeout = new Command("config autoproxy timeout", "config autoproxy timeout [<duration>|off|reset]", "Sets the latch timeout duration for your system");
+    public static Command ConfigShowPrivate = new Command("config show private", "config show private [on|off]", "Sets whether private information is shown to linked accounts by default");
     public static Command ConfigMemberDefaultPrivacy = new("config private member", "config private member [on|off]", "Sets whether member privacy is automatically set to private when creating a new member");
     public static Command ConfigGroupDefaultPrivacy = new("config private group", "config private group [on|off]", "Sets whether group privacy is automatically set to private when creating a new group");
     public static Command AutoproxySet = new Command("autoproxy", "autoproxy [off|front|latch|member]", "Sets your system's autoproxy mode for the current server");
@@ -50,7 +52,8 @@ public partial class CommandTree
     public static Command MemberServerName = new Command("member servername", "member <member> servername [server name]", "Changes a member's display name in the current server");
     public static Command MemberAutoproxy = new Command("member autoproxy", "member <member> autoproxy [on|off]", "Sets whether a member will be autoproxied when autoproxy is set to latch or front mode.");
     public static Command MemberKeepProxy = new Command("member keepproxy", "member <member> keepproxy [on|off]", "Sets whether to include a member's proxy tags when proxying");
-    public static Command MemberRandom = new Command("random", "random", "Shows the info card of a randomly selected member in your system.");
+    public static Command MemberRandom = new Command("system random", "system [system] random", "Shows the info card of a randomly selected member in a system.");
+    public static Command MemberId = new Command("member id", "member [member] id", "Prints a member's id.");
     public static Command MemberPrivacy = new Command("member privacy", "member <member> privacy <name|description|birthday|pronouns|metadata|visibility|all> <public|private>", "Changes a members's privacy settings");
     public static Command GroupInfo = new Command("group", "group <name>", "Looks up information about a group");
     public static Command GroupNew = new Command("group new", "group new <name>", "Creates a new group");
@@ -62,13 +65,14 @@ public partial class CommandTree
     public static Command GroupColor = new Command("group color", "group <group> color [color]", "Changes a group's color");
     public static Command GroupAdd = new Command("group add", "group <group> add <member> [member 2] [member 3...]", "Adds one or more members to a group");
     public static Command GroupRemove = new Command("group remove", "group <group> remove <member> [member 2] [member 3...]", "Removes one or more members from a group");
+    public static Command GroupId = new Command("group id", "group [group] id", "Prints a group's id.");
     public static Command GroupPrivacy = new Command("group privacy", "group <group> privacy <name|description|icon|metadata|visibility|all> <public|private>", "Changes a group's privacy settings");
     public static Command GroupBannerImage = new Command("group banner", "group <group> banner [url]", "Set the group's banner image");
     public static Command GroupIcon = new Command("group icon", "group <group> icon [url|@mention]", "Changes a group's icon");
     public static Command GroupDelete = new Command("group delete", "group <group> delete", "Deletes a group");
     public static Command GroupFrontPercent = new Command("group frontpercent", "group <group> frontpercent [timespan]", "Shows a group's front breakdown.");
     public static Command GroupMemberRandom = new Command("group random", "group <group> random", "Shows the info card of a randomly selected member in a group.");
-    public static Command GroupRandom = new Command("random", "random group", "Shows the info card of a randomly selected group in your system.");
+    public static Command GroupRandom = new Command("system random", "system [system] random group", "Shows the info card of a randomly selected group in a system.");
     public static Command Switch = new Command("switch", "switch <member> [member 2] [member 3...]", "Registers a switch");
     public static Command SwitchOut = new Command("switch out", "switch out", "Registers a switch with no members");
     public static Command SwitchMove = new Command("switch move", "switch move <date/time>", "Moves the latest switch in time");
@@ -134,8 +138,8 @@ public partial class CommandTree
 
     public static Command[] ConfigCommands =
     {
-        ConfigTimezone, ConfigPing, ConfigAutoproxyAccount, ConfigAutoproxyTimeout,
-        ConfigMemberDefaultPrivacy, ConfigGroupDefaultPrivacy
+        ConfigAutoproxyAccount, ConfigAutoproxyTimeout, ConfigTimezone, ConfigPing,
+        ConfigMemberDefaultPrivacy, ConfigGroupDefaultPrivacy, ConfigShowPrivate
     };
 
     public static Command[] AutoproxyCommands =

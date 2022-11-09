@@ -118,7 +118,7 @@ public class Groups
 
         await ctx.Repository.UpdateGroup(target.Id, new GroupPatch { Name = newName });
 
-        await ctx.Reply($"{Emojis.Success} Group name changed from **{target.Name}** to **{newName}**.");
+        await ctx.Reply($"{Emojis.Success} Group name changed from **{target.Name}** to **{newName}** (using {newName.Length}/{Limits.MaxGroupNameLength} characters).");
     }
 
     public async Task GroupDisplayName(Context ctx, PKGroup target)
@@ -155,9 +155,12 @@ public class Groups
 
                 if (ctx.System?.Id == target.System)
                     eb.Description(
-                        $"To change display name, type `pk;group {reference} displayname <display name>`."
-                        + $"To clear it, type `pk;group {reference} displayname -clear`."
+                        $"To change display name, type `pk;group {reference} displayname <display name>`.\n"
+                        + $"To clear it, type `pk;group {reference} displayname -clear`.\n"
                         + $"To print the raw display name, type `pk;group {reference} displayname -raw`.");
+
+                if (ctx.System?.Id == target.System)
+                    eb.Footer(new Embed.EmbedFooter($"Using {target.DisplayName.Length}/{Limits.MaxGroupNameLength} characters."));
 
                 await ctx.Reply(embed: eb.Build());
             }
@@ -183,7 +186,7 @@ public class Groups
             var patch = new GroupPatch { DisplayName = Partial<string>.Present(newDisplayName) };
             await ctx.Repository.UpdateGroup(target.Id, patch);
 
-            await ctx.Reply($"{Emojis.Success} Group display name changed.");
+            await ctx.Reply($"{Emojis.Success} Group display name changed (using {newDisplayName.Length}/{Limits.MaxGroupNameLength} characters).");
         }
     }
 
@@ -217,7 +220,8 @@ public class Groups
                         $"To print the description with formatting, type `pk;group {target.Reference(ctx)} description -raw`."
                         + (ctx.System?.Id == target.System
                             ? $" To clear it, type `pk;group {target.Reference(ctx)} description -clear`."
-                            : "")))
+                            : "")
+                            + $" Using {target.Description.Length}/{Limits.MaxDescriptionLength} characters."))
                     .Build());
             return;
         }
@@ -239,7 +243,7 @@ public class Groups
             var patch = new GroupPatch { Description = Partial<string>.Present(description) };
             await ctx.Repository.UpdateGroup(target.Id, patch);
 
-            await ctx.Reply($"{Emojis.Success} Group description changed.");
+            await ctx.Reply($"{Emojis.Success} Group description changed (using {description.Length}/{Limits.MaxDescriptionLength} characters).");
         }
     }
 
@@ -572,6 +576,11 @@ public class Groups
         await ctx.Repository.DeleteGroup(target.Id);
 
         await ctx.Reply($"{Emojis.Success} Group deleted.");
+    }
+
+    public async Task DisplayId(Context ctx, PKGroup target)
+    {
+        await ctx.Reply(target.Hid);
     }
 
     private async Task<PKSystem> GetGroupSystem(Context ctx, PKGroup target)

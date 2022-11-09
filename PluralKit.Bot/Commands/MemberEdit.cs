@@ -42,7 +42,7 @@ public class MemberEdit
         var patch = new MemberPatch { Name = Partial<string>.Present(newName) };
         await ctx.Repository.UpdateMember(target.Id, patch);
 
-        await ctx.Reply($"{Emojis.Success} Member renamed.");
+        await ctx.Reply($"{Emojis.Success} Member renamed (using {newName.Length}/{Limits.MaxMemberNameLength} characters).");
         if (newName.Contains(" "))
             await ctx.Reply(
                 $"{Emojis.Note} Note that this member's name now contains spaces. You will need to surround it with \"double quotes\" when using commands referring to it.");
@@ -89,7 +89,8 @@ public class MemberEdit
                         $"To print the description with formatting, type `pk;member {target.Reference(ctx)} description -raw`."
                         + (ctx.System?.Id == target.System
                             ? $" To clear it, type `pk;member {target.Reference(ctx)} description -clear`."
-                            : "")))
+                            : "")
+                        + $" Using {target.Description.Length}/{Limits.MaxDescriptionLength} characters."))
                     .Build());
             return;
         }
@@ -111,7 +112,7 @@ public class MemberEdit
             var patch = new MemberPatch { Description = Partial<string>.Present(description) };
             await ctx.Repository.UpdateMember(target.Id, patch);
 
-            await ctx.Reply($"{Emojis.Success} Member description changed.");
+            await ctx.Reply($"{Emojis.Success} Member description changed (using {description.Length}/{Limits.MaxDescriptionLength} characters).");
         }
     }
 
@@ -141,7 +142,8 @@ public class MemberEdit
                     $"**{target.NameFor(ctx)}**'s pronouns are **{target.Pronouns}**.\nTo print the pronouns with formatting, type `pk;member {target.Reference(ctx)} pronouns -raw`."
                     + (ctx.System?.Id == target.System
                         ? $" To clear them, type `pk;member {target.Reference(ctx)} pronouns -clear`."
-                        : ""));
+                        : "")
+                    + $" Using {target.Pronouns.Length}/{Limits.MaxPronounsLength} characters.");
             return;
         }
 
@@ -162,7 +164,7 @@ public class MemberEdit
             var patch = new MemberPatch { Pronouns = Partial<string>.Present(pronouns) };
             await ctx.Repository.UpdateMember(target.Id, patch);
 
-            await ctx.Reply($"{Emojis.Success} Member pronouns changed.");
+            await ctx.Reply($"{Emojis.Success} Member pronouns changed (using {pronouns.Length}/{Limits.MaxPronounsLength} characters).");
         }
     }
 
@@ -333,7 +335,9 @@ public class MemberEdit
         var eb = new EmbedBuilder()
             .Title("Member names")
             .Footer(new Embed.EmbedFooter(
-                $"Member ID: {target.Hid} | Active name in bold. Server name overrides display name, which overrides base name."));
+                $"Member ID: {target.Hid} | Active name in bold. Server name overrides display name, which overrides base name."
+                + (target.DisplayName != null && ctx.System?.Id == target.System ? $" Using {target.DisplayName.Length}/{Limits.MaxMemberNameLength} characters for the display name." : "")
+                + (memberGuildConfig?.DisplayName != null ? $" Using {memberGuildConfig?.DisplayName.Length}/{Limits.MaxMemberNameLength} characters for the server name." : "")));
 
         var showDisplayName = target.NamePrivacy.CanAccess(lcx);
 
@@ -395,8 +399,8 @@ public class MemberEdit
             var reference = target.Reference(ctx);
             if (ctx.System?.Id == target.System)
                 eb.Description(
-                    $"To change display name, type `pk;member {reference} displayname <display name>`."
-                    + $"To clear it, type `pk;member {reference} displayname -clear`."
+                    $"To change display name, type `pk;member {reference} displayname <display name>`.\n"
+                    + $"To clear it, type `pk;member {reference} displayname -clear`.\n"
                     + $"To print the raw display name, type `pk;member {reference} displayname -raw`.");
             await ctx.Reply(embed: eb.Build());
             return;
@@ -419,11 +423,14 @@ public class MemberEdit
         {
             var newDisplayName = ctx.RemainderOrNull(false).NormalizeLineEndSpacing();
 
+            if (newDisplayName.Length > Limits.MaxMemberNameLength)
+                throw Errors.StringTooLongError("Member display name", newDisplayName.Length, Limits.MaxMemberNameLength);
+
             var patch = new MemberPatch { DisplayName = Partial<string>.Present(newDisplayName) };
             await ctx.Repository.UpdateMember(target.Id, patch);
 
             await PrintSuccess(
-                $"{Emojis.Success} Member display name changed. This member will now be proxied using the name \"{newDisplayName}\".");
+                $"{Emojis.Success} Member display name changed (using {newDisplayName.Length}/{Limits.MaxMemberNameLength} characters). This member will now be proxied using the name \"{newDisplayName}\".");
         }
     }
 
@@ -480,7 +487,7 @@ public class MemberEdit
                 new MemberGuildPatch { DisplayName = newServerName });
 
             await ctx.Reply(
-                $"{Emojis.Success} Member server name changed. This member will now be proxied using the name \"{newServerName}\" in this server ({ctx.Guild.Name}).");
+                $"{Emojis.Success} Member server name changed (using {newServerName.Length}/{Limits.MaxMemberNameLength} characters). This member will now be proxied using the name \"{newServerName}\" in this server ({ctx.Guild.Name}).");
         }
     }
 
@@ -567,11 +574,11 @@ public class MemberEdit
                 .Field(new Embed.Field("Avatar", target.AvatarPrivacy.Explanation()))
                 .Field(new Embed.Field("Birthday", target.BirthdayPrivacy.Explanation()))
                 .Field(new Embed.Field("Pronouns", target.PronounPrivacy.Explanation()))
-                .Field(new Embed.Field("Meta (message count, last front, last message)",
+                .Field(new Embed.Field("Meta (creation date, message count, last front, last message)",
                     target.MetadataPrivacy.Explanation()))
                 .Field(new Embed.Field("Visibility", target.MemberVisibility.Explanation()))
                 .Description(
-                    "To edit privacy settings, use the command:\n`pk;member <member> privacy <subject> <level>`\n\n- `subject` is one of `name`, `description`, `avatar`, `birthday`, `pronouns`, `created`, `messages`, `visibility`, or `all`\n- `level` is either `public` or `private`.")
+                    "To edit privacy settings, use the command:\n`pk;member <member> privacy <subject> <level>`\n\n- `subject` is one of `name`, `description`, `avatar`, `birthday`, `pronouns`, `metadata`, `visibility`, or `all`\n- `level` is either `public` or `private`.")
                 .Build());
             return;
         }

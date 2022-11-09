@@ -118,6 +118,10 @@ public class ProxyService
         if (msg.Author.System == true || msg.Author.Bot || msg.WebhookId != null)
             throw new ProxyChecksFailedException("This message was not sent by a normal user.");
 
+        // Make sure this message does not start a forum thread
+        if (msg.Id == msg.ChannelId)
+            throw new ProxyChecksFailedException("This message is the initial message in a forum post, which PluralKit is unable to proxy correctly.");
+
         // Make sure proxying is enabled here
         if (ctx.InBlacklist)
             throw new ProxyChecksFailedException(
@@ -394,7 +398,7 @@ public class ProxyService
     }
 
     private string FixSameNameInner(string name)
-        => $"{name}\u17b5";
+        => $"{name}\u200a\u17b5";
 
     public static bool IsUnlatch(Message message)
         => message.Content.StartsWith(@"\\") || message.Content.StartsWith("\\\u200b\\");

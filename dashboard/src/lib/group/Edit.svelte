@@ -3,7 +3,7 @@
     import { createEventDispatcher, tick } from 'svelte';
     import { Group } from '../../api/types';
     import api from '../../api';
-    import autosize from 'svelte-autosize';
+    import { autoresize } from 'svelte-textarea-autoresize';
 
     const descriptions: string[] = JSON.parse(localStorage.getItem("pk-config"))?.description_templates;
 
@@ -23,6 +23,10 @@
         dispatch('deletion', group.id);
     }
 
+    function update(group: Group) {
+        dispatch('update', group);
+    }
+
     async function submit() {
         let data = input;
         err = [];
@@ -36,13 +40,16 @@
             }
         }
 
+        // trim all string fields
+        Object.keys(data).forEach(k => data[k] = typeof data[k] == "string" ? data[k].trim() : data[k]);
+
         err = err;
         if (err.length > 0) return;
 
         loading = true;
         try {
             let res = await api().groups(group.id).patch({data});
-            group = {...group, ...res};
+            update({...group, ...res});
             err = [];
             success = true;
             loading = false;
@@ -80,8 +87,6 @@
             loading = false;
             deletion();
         } catch (error) {
-            console.log(error);
-            deleteErr = error.message;
             loading = false;
         }
     }
@@ -132,7 +137,7 @@
     <Button size="sm" color="primary" on:click={() => input.description = descriptions[2]} aria-label="use template 3">Template 3</Button>
     {/if}
     <br>
-    <textarea class="form-control" bind:value={input.description} maxlength={1000} use:autosize placeholder={group.description} aria-label="group description"/>
+    <textarea class="form-control" bind:value={input.description} maxlength={1000} use:autoresize placeholder={group.description} aria-label="group description"/>
 </div>
 {#if !loading}<Button style="flex: 0" color="primary" on:click={submit} aria-label="submit edits">Submit</Button> <Button style="flex: 0" color="secondary" on:click={() => editMode = false} aria-label="cancel edits">Back</Button><Button style="flex: 0; float: right;" color="danger" on:click={toggleDeleteModal} aria-label="delete group">Delete</Button>
 {:else}<Button style="flex: 0" color="primary" disabled aria-label="submit edits"><Spinner size="sm"/></Button> <Button style="flex: 0" color="secondary" disabled aria-label="cancel edits">Back</Button><Button style="flex: 0; float: right;" color="danger" disabled aria-label="delete group">Delete</Button>{/if}

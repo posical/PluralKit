@@ -4,6 +4,7 @@
     import moment from 'moment';
     import { toHTML } from 'discord-markdown';
     import parseTimestamps from '../../api/parse-timestamps';
+    import resizeMedia from '../../api/resize-media';
     import twemoji from 'twemoji';
 
     import GroupEdit from './GroupEdit.svelte';
@@ -150,7 +151,7 @@
                     Edit privacy
                 </ModalHeader>
                     <ModalBody>
-                        <Privacy bind:member bind:privacyOpen/>
+                        <Privacy on:update bind:member bind:privacyOpen/>
                     </ModalBody>
             </Modal>
         </Col>
@@ -174,7 +175,7 @@
         {@html htmlDescription && htmlDescription}
     </div>
     {#if (member.banner && ((settings && settings.appearance.banner_bottom) || !settings))}
-    <img src={member.banner} alt="member banner" class="w-100 mb-3 rounded" style="max-height: 17em; object-fit: cover"/>
+    <img on:click={toggleBannerModal} src={resizeMedia(member.banner, [1200, 480])} alt="member banner" class="w-100 mb-3 rounded" style="max-height: 13em; object-fit: cover; cursor: pointer"/>
     {/if}
     {#if !isPublic}
     <Button style="flex: 0" color="primary" on:click={() => editMode = true} aria-label="edit member information">Edit</Button>
@@ -186,8 +187,8 @@
     <Link to={getSystemPageUrl()}><Button style="flex: 0; {!isPublic && "float: right;"}" color="primary" tabindex={-1} aria-label="view member's system">View system</Button></Link>
     {/if}
     {:else if editMode}
-        <Edit on:deletion bind:member bind:editMode />
+        <Edit on:update on:deletion bind:member bind:editMode />
     {:else if groupMode}
-        <GroupEdit bind:member bind:groups bind:groupMode />
+        <GroupEdit on:updateMemberGroups bind:member bind:groups bind:groupMode />
     {/if}
     </CardBody>

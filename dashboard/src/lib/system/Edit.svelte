@@ -1,6 +1,6 @@
 <script lang="ts">
     import { Row, Col, Input, Button, Label, Alert, Spinner } from 'sveltestrap';
-    import autosize from 'svelte-autosize';
+    import { autoresize } from 'svelte-textarea-autoresize';
     // import moment from 'moment-timezone';
     import { currentUser } from '../../stores';
 
@@ -33,6 +33,9 @@
         /* if (data.timezone && !moment.tz.zone(data.timezone)) {
             err.push(`"${data.timezone}" is not a valid timezone, check out <a target="_blank" style="color: var(--bs-body-color);" href="https://xske.github.io/tz/">this site</a> to see your current timezone!`);
         } */
+
+        // trim all string fields
+        Object.keys(data).forEach(k => data[k] = typeof data[k] == "string" ? data[k].trim() : data[k]);
 
         err = err;
         if (err.length > 0) return;
@@ -70,6 +73,10 @@
         <Input bind:value={input.tag} maxlength={100} type="text" placeholder={user.tag} aria-label="system tag" />
     </Col>
     <Col xs={12} lg={4} class="mb-2">
+        <Label>Pronouns:</Label>
+        <Input bind:value={input.pronouns} maxlength={100} style="resize: none; height: 1em" type="textarea" placeholder={user.pronouns} aria-label="system pronouns" />
+    </Col>
+    <Col xs={12} lg={4} class="mb-2">
         <Label>Color:</Label>
         <Input bind:value={input.color} type="text" placeholder={user.color} aria-label="system color"/>
     </Col>
@@ -94,7 +101,7 @@
     <Button size="sm" color="primary" on:click={() => input.description = descriptions[2]} aria-label="use template 3">Template 3</Button>
     {/if}
     <br>
-    <textarea class="form-control" bind:value={input.description} maxlength={1000} use:autosize placeholder={user.description}  aria-label="system description"/>
+    <textarea class="form-control" bind:value={input.description} maxlength={1000} use:autoresize placeholder={user.description}  aria-label="system description"/>
 </div>
 {#if !loading}<Button style="flex: 0" color="primary" on:click={submit} aria-label="submit edits" >Submit</Button> <Button style="flex: 0" color="secondary" on:click={() => editMode = false} aria-label="cancel edits">Back</Button>
 {:else}<Button style="flex: 0" color="primary" disabled  aria-label="submit edits"><Spinner size="sm"/></Button> <Button style="flex: 0" color="secondary" disabled aria-label="cancel edits">Back</Button>{/if}

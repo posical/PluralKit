@@ -2,23 +2,29 @@
     import { tick } from 'svelte';
     import { Modal, CardHeader, CardTitle, Image, Spinner } from 'sveltestrap';
     import default_avatar from '../assets/default_avatar.png';
+    import resizeMedia from '../api/resize-media';
     import { toHTML } from 'discord-markdown';
     import twemoji from 'twemoji';
 
     export let item: any;
+    export let searchBy: string = null;
+    export let sortBy: string = null;
 
     let htmlName: string;
     let nameElement: any; 
     let settings = JSON.parse(localStorage.getItem("pk-settings"));
 
-    $: if (item.name) htmlName = toHTML(item.name);
-        else htmlName = "";
+    $: if (item.name) {
+        if ((searchBy === "display name" || sortBy === "display name") && item.display_name) htmlName = toHTML(item.display_name);
+        else htmlName = toHTML(item.name);
+    } else htmlName = "";
 
     $: if (settings && settings.appearance.twemoji) {
         if (nameElement) twemoji.parse(nameElement);
     }
 
     $: icon_url = item.avatar_url ? item.avatar_url : item.icon ? item.icon : default_avatar;
+    $: icon_url_resized = resizeMedia(icon_url)
 
     let avatarOpen = false;
     const toggleAvatarModal = () => (avatarOpen = !avatarOpen);
@@ -43,9 +49,9 @@
             </div>
             <span bind:this={nameElement} style="vertical-align: middle;">{@html htmlName} ({item.id})</span>
         </div>
-        <div>
+        <div style="margin-left: auto;">
         {#if item && (item.avatar_url || item.icon)}
-        <img tabindex={0} on:keydown|stopPropagation={(event) => {if (event.key === "Enter") {avatarOpen = true}}} on:click|stopPropagation={toggleAvatarModal} class="rounded-circle avatar" src={icon_url} alt={altText} />
+        <img tabindex={0} on:keydown|stopPropagation={(event) => {if (event.key === "Enter") {avatarOpen = true}}} on:click|stopPropagation={toggleAvatarModal} class="rounded-circle avatar" src={icon_url_resized} alt={altText} />
         {:else}
         <img class="rounded-circle avatar" src={default_avatar} alt="icon (default)" tabindex={0} />
         {/if}

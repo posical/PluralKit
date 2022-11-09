@@ -17,7 +17,7 @@ public class DiscordRequestException: Exception
     public HttpStatusCode StatusCode => Response.StatusCode;
     public int? ErrorCode => ApiError?.Code;
 
-    internal DiscordApiError? ApiError { get; init; }
+    public DiscordApiError? ApiError { get; init; }
 
     public override string Message =>
         (ApiError?.Message ?? Response.ReasonPhrase ?? "") + (FormError != null ? $": {FormError}" : "");
@@ -60,6 +60,14 @@ public class BadRequestException: DiscordRequestException
         response, responseBody, apiError)
     { }
 }
+
+public class RequestEntityTooLargeException: DiscordRequestException
+{
+    public RequestEntityTooLargeException(HttpResponseMessage response, string responseBody, DiscordApiError? apiError) : base(
+        response, responseBody, apiError)
+    { }
+}
+
 
 public class TooManyRequestsException: DiscordRequestException
 {

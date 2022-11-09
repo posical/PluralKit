@@ -35,10 +35,12 @@ public class ProxiedMessage
     private readonly DiscordApiClient _rest;
     private readonly WebhookExecutorService _webhookExecutor;
     private readonly ProxyService _proxy;
+    private readonly LastMessageCacheService _lastMessageCache;
 
     public ProxiedMessage(EmbedService embeds,
                           DiscordApiClient rest, IMetrics metrics, ModelRepository repo, ProxyService proxy,
-                          WebhookExecutorService webhookExecutor, LogChannelService logChannel, IDiscordCache cache)
+                          WebhookExecutorService webhookExecutor, LogChannelService logChannel, IDiscordCache cache,
+                          LastMessageCacheService lastMessageCache)
     {
         _embeds = embeds;
         _rest = rest;
@@ -48,6 +50,7 @@ public class ProxiedMessage
         // _cache = cache;
         _metrics = metrics;
         _proxy = proxy;
+        _lastMessageCache = lastMessageCache;
     }
 
     public async Task ReproxyMessage(Context ctx)
@@ -157,7 +160,13 @@ public class ProxiedMessage
             if (ctx.Guild == null)
                 throw new PKSyntaxError($"You must use a message link to {editType} messages in DMs.");
 
-            var recent = await FindRecentMessage(ctx, timeout);
+            PKMessage? recent;
+
+            if (isReproxy)
+                recent = await ctx.Repository.GetLastMessage(ctx.Guild.Id, ctx.Channel.Id, ctx.Author.Id);
+            else
+                recent = await FindRecentMessage(ctx, timeout);
+
             if (recent == null)
                 throw new PKSyntaxError($"Could not find a recent message to {editType}.");
 
@@ -182,9 +191,14 @@ public class ProxiedMessage
                 throw new PKError(error);
         }
 
+        var isLatestMessage = _lastMessageCache.GetLastMessage(ctx.Message.ChannelId)?.Current.Id == ctx.Message.Id
+            ? _lastMessageCache.GetLastMessage(ctx.Message.ChannelId)?.Previous?.Id == msg.Message.Mid
+            : _lastMessageCache.GetLastMessage(ctx.Message.ChannelId)?.Current.Id == msg.Message.Mid;
+
         var msgTimestamp = DiscordUtils.SnowflakeToInstant(msg.Message.Mid);
-        if (isReproxy && SystemClock.Instance.GetCurrentInstant() - msgTimestamp > timeout)
-            throw new PKError($"The message is too old to be {editTypeAction}.");
+        if (isReproxy && !isLatestMessage)
+            if (SystemClock.Instance.GetCurrentInstant() - msgTimestamp > timeout)
+                throw new PKError($"The message is too old to be {editTypeAction}.");
 
         return msg;
     }

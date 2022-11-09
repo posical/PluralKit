@@ -4,6 +4,7 @@
     import moment from 'moment';
     import { toHTML } from 'discord-markdown';
     import parseTimestamps from '../../api/parse-timestamps';
+    import resizeMedia from '../../api/resize-media';
     import Edit from './Edit.svelte';
     import twemoji from 'twemoji';
     import Privacy from './Privacy.svelte';
@@ -113,7 +114,7 @@
                Edit privacy
             </ModalHeader>
                 <ModalBody>
-                    <Privacy bind:group bind:privacyOpen={privacyOpen}/>
+                    <Privacy on:update bind:group bind:privacyOpen={privacyOpen}/>
                 </ModalBody>
         </Modal>
     </Col>
@@ -124,7 +125,7 @@
     {@html htmlDescription && htmlDescription}
 </div>
 {#if (group.banner && ((settings && settings.appearance.banner_bottom) || !settings))}
-<img src={group.banner} alt="group banner" class="w-100 mb-3 rounded" style="max-height: 12em; object-fit: cover"/>
+<img on:click={toggleBannerModal} src={resizeMedia(group.banner, [1200, 480])} alt="group banner" class="w-100 mb-3 rounded" style="max-height: 13em; object-fit: cover; cursor: pointer"/>
 {/if}
 
 {#if !isPublic}
@@ -142,9 +143,9 @@
 <Link to={getGroupPageUrl(true)}><button class="link-button button-right btn btn-secondary" style={isPublic ? "float: none !important; margin-left: 0;" : ""} tabindex={-1} aria-label="randomize group members">Randomize group</button></Link>
 
 {:else if editMode}
-<Edit on:deletion bind:group bind:editMode />
+<Edit on:update on:deletion bind:group bind:editMode />
 {:else if memberMode}
-    <MemberEdit bind:group bind:memberMode bind:members />
+    <MemberEdit on:updateGroupMembers bind:group bind:memberMode bind:members />
 {/if}
 </CardBody>
 
